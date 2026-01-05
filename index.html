@@ -731,7 +731,7 @@
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td colspan="6">
-            <div class="empty">No foods added yet. Tap <b>+ Food Item</b> or <b>+ Item</b> to begin.</div>
+            <div class="empty">No foods added yet. Tap <b>+ Food Item</b> to begin.</div>
           </td>
         `;
         tbody.appendChild(tr);
@@ -781,6 +781,9 @@
   `;
 
   wireInlineFoodRow(tr, it.id);
+          tbody.appendChild(tr);
+return;
+
 }
 
           tr.innerHTML = `
@@ -988,10 +991,6 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
             chkDislike.disabled = any && picked !== "dislike";
             chkTry.disabled = any && picked !== "try";
           }
-
-          chkLike.addEventListener("change", saveAfterPreference);
-          chkDislike.addEventListener("change", saveAfterPreference);
-          chkTry.addEventListener("change", saveAfterPreference);
 
           [chkLike, chkDislike, chkTry].forEach(chk => {
             chk.addEventListener("change", () => {
