@@ -1420,6 +1420,29 @@ btn.addEventListener("click", () => {
             model.time = (document.getElementById("rTime").value || "").trim();
             model.notes = (document.getElementById("rNotes").value || "").trim();
 
+            footer: ({ close }) => {
+  const btnClose = mkBtn("Close", "ghost", () => close());
+  const btnSave = mkBtn("Save", "primary", () => {
+    model.title = (document.getElementById("rTitle").value || "").trim();
+    model.servings = (document.getElementById("rServings").value || "").trim();
+    model.time = (document.getElementById("rTime").value || "").trim();
+    model.notes = (document.getElementById("rNotes").value || "").trim();
+
+    if (isEdit){
+      model.updatedAt = Date.now();
+      updateRecipe(mealKey, model);
+    } else {
+      addRecipe(mealKey, model);
+    }
+
+    close();
+    refreshStatsAndDatalist();
+    renderActivePanel();
+  });
+
+  return [btnClose, btnSave];
+}
+
             if (isEdit){
               model.updatedAt = Date.now();
               updateRecipe(mealKey, model);
@@ -1474,16 +1497,7 @@ btn.addEventListener("click", () => {
       });
     }
 
-    model.ingredientsItems = (model.ingredientsItems || []).filter(it => {
-  const hasName = (it.name || "").trim().length > 0;
-  const hasQty = (it.qty || "").toString().trim().length > 0;
-  const hasNotes = (it.notes || "").trim().length > 0;
-  return hasName || hasQty || hasNotes;
-});
-model.stepsItems = (model.stepsItems || []).map(s => (s || "").trim()).filter(Boolean);
-
-
-    function addRecipe(mealKey, recipe){
+      function addRecipe(mealKey, recipe){
       state.recipes[mealKey] = state.recipes[mealKey] || [];
       state.recipes[mealKey].push(recipe);
       persist();
