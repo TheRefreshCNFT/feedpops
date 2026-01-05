@@ -1,0 +1,1598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Feed Me</title>
+  <style>
+    :root{
+      --bg0:#070A12;
+      --bg1:#0A1222;
+      --card: rgba(255,255,255,0.06);
+      --card2: rgba(255,255,255,0.08);
+      --stroke: rgba(255,255,255,0.12);
+      --stroke2: rgba(255,255,255,0.18);
+      --text:#EAF0FF;
+      --muted:#AAB6D6;
+      --accent:#7CF2D6;
+      --accent2:#8AA7FF;
+      --warn:#FF6B7A;
+      --ok:#74F59D;
+      --shadow: 0 18px 55px rgba(0,0,0,0.45);
+      --radius: 18px;
+      --radius2: 14px;
+      --pad: 14px;
+      --gap: 12px;
+      --tap: 48px;
+      --maxw: 1080px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    *{ box-sizing:border-box; }
+    html, body{ height:100%; }
+    body{
+      margin:0;
+      color:var(--text);
+      font-family:var(--sans);
+      -webkit-font-smoothing: antialiased;
+      background:
+        radial-gradient(1200px 900px at 15% 10%, rgba(138,167,255,0.18), transparent 55%),
+        radial-gradient(1000px 800px at 85% 15%, rgba(124,242,214,0.16), transparent 55%),
+        radial-gradient(900px 700px at 35% 95%, rgba(255,107,122,0.10), transparent 60%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      overflow-x:hidden;
+    }
+
+    .wrap{
+      width: min(var(--maxw), calc(100% - 22px));
+      margin: 18px auto 40px;
+      display:flex;
+      flex-direction:column;
+      gap: 14px;
+    }
+
+    .card{
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      overflow:hidden;
+    }
+    .cardInner{ padding: 18px; }
+    .headerCard .cardInner{
+      padding: 18px 18px 16px;
+      text-align:center;
+    }
+    h1{
+      margin:0;
+      font-size: 28px;
+      letter-spacing: 0.3px;
+      line-height: 1.15;
+    }
+    .subtitle{
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .primary{
+      position:relative;
+    }
+
+    /* Tabs */
+    .tabs{
+      display:flex;
+      gap: 8px;
+      padding: 12px 12px 0;
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    .tabBtn{
+      height: var(--tap);
+      min-width: max-content;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      font-weight: 650;
+      letter-spacing: 0.2px;
+      cursor:pointer;
+      user-select:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      transition: transform .08s ease, background .2s ease, border-color .2s ease;
+      touch-action: manipulation;
+    }
+    .tabBtn:active{ transform: scale(0.98); }
+    .tabBtn[aria-selected="true"]{
+      background: linear-gradient(180deg, rgba(124,242,214,0.18), rgba(138,167,255,0.10));
+      border-color: rgba(124,242,214,0.35);
+    }
+
+    .panel{
+      padding: 12px;
+    }
+
+    .panelTop{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .panelTitle{
+      font-size: 14px;
+      color: var(--muted);
+      letter-spacing: 0.15px;
+    }
+    .actions{ display:flex; gap: 10px; align-items:center; }
+
+    .btn{
+      height: var(--tap);
+      padding: 0 14px;
+      border-radius: 14px;
+      border: 1px solid var(--stroke2);
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      font-weight: 700;
+      cursor:pointer;
+      display:inline-flex;
+      align-items:center;
+      gap: 10px;
+      transition: transform .08s ease, background .2s ease, border-color .2s ease;
+      touch-action: manipulation;
+      user-select:none;
+      white-space:nowrap;
+    }
+    .btn:active{ transform: scale(0.985); }
+    .btn.primary{
+      border-color: rgba(124,242,214,0.36);
+      background: linear-gradient(180deg, rgba(124,242,214,0.16), rgba(124,242,214,0.08));
+    }
+    .btn.danger{
+      border-color: rgba(255,107,122,0.35);
+      background: linear-gradient(180deg, rgba(255,107,122,0.16), rgba(255,107,122,0.07));
+    }
+    .btn.ghost{
+      background: rgba(255,255,255,0.03);
+      border-color: var(--stroke);
+    }
+
+    .chip{
+      font-family: var(--mono);
+      font-size: 12px;
+      color: rgba(234,240,255,0.85);
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,0.04);
+      border-radius: 999px;
+      padding: 6px 10px;
+      white-space:nowrap;
+    }
+
+    /* My Foods table */
+    .subCard{
+      background: var(--card2);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius2);
+      overflow:hidden;
+    }
+    .subHead{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding: 12px 12px 10px;
+      border-bottom: 1px solid var(--stroke);
+      gap: 10px;
+    }
+    .subHead h3{
+      margin:0;
+      font-size: 15px;
+      letter-spacing: 0.2px;
+    }
+    .scrollBox{
+      max-height: 360px; /* “reasonable amount” then scroll */
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table{
+      width:100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      min-width: 740px; /* allows horizontal scroll on small screens */
+    }
+    .tableWrap{
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    th, td{
+      padding: 10px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      vertical-align: top;
+    }
+    th{
+      position: sticky;
+      top: 0;
+      background: rgba(12,16,28,0.92);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: rgba(170,182,214,0.95);
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+      z-index: 2;
+    }
+    td small{ color: var(--muted); }
+    .badgeYes{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      height: 22px;
+      min-width: 46px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(116,245,157,0.25);
+      background: rgba(116,245,157,0.10);
+      color: rgba(208,255,226,0.92);
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .badgeNo{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      height: 22px;
+      min-width: 46px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(170,182,214,0.18);
+      background: rgba(255,255,255,0.04);
+      color: rgba(170,182,214,0.95);
+      font-weight: 800;
+      font-size: 12px;
+    }
+
+    /* Cards grid for recipes/lists */
+    .cards{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 740px){
+      .cards{
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+    @media (min-width: 1020px){
+      .cards{
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+    }
+
+    .miniCard{
+      border-radius: var(--radius2);
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,0.05);
+      padding: 12px;
+      cursor:pointer;
+      touch-action: manipulation;
+      user-select:none;
+      transition: transform .08s ease, border-color .2s ease, background .2s ease;
+      min-height: 120px;
+      display:flex;
+      flex-direction:column;
+      gap: 8px;
+    }
+    .miniCard:active{ transform: scale(0.99); }
+    .miniCard:hover{ border-color: rgba(124,242,214,0.20); }
+    .miniTop{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap: 10px;
+    }
+    .miniTitle{
+      margin:0;
+      font-size: 15px;
+      line-height: 1.25;
+      letter-spacing: 0.2px;
+    }
+    .miniMeta{
+      font-size: 12px;
+      color: var(--muted);
+      white-space:nowrap;
+    }
+    .miniBody{
+      color: rgba(234,240,255,0.9);
+      font-size: 13px;
+      line-height: 1.35;
+      overflow:auto;
+      max-height: 130px; /* partial view */
+      padding-right: 4px;
+    }
+    .miniBody .muted{ color: var(--muted); }
+
+    /* Modals */
+    .modalOverlay{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding: 16px;
+      z-index: 9999;
+    }
+    .modalOverlay.show{ display:flex; }
+    .modal{
+      width: min(980px, 100%);
+      max-height: min(86vh, 760px);
+      overflow:hidden;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(12,16,28,0.88);
+      box-shadow: 0 25px 80px rgba(0,0,0,0.6);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      display:flex;
+      flex-direction:column;
+    }
+    .modalHead{
+      padding: 14px 14px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+    }
+    .modalHead h2{
+      margin:0;
+      font-size: 16px;
+      letter-spacing: 0.2px;
+    }
+    .modalBody{
+      padding: 14px;
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .modalFoot{
+      padding: 12px 14px 14px;
+      border-top: 1px solid rgba(255,255,255,0.10);
+      display:flex;
+      gap: 10px;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+    }
+
+    .grid5{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 860px){
+      .grid5{
+        grid-template-columns: 1.15fr 0.7fr 0.9fr 0.9fr 1.3fr;
+        align-items:start;
+      }
+    }
+
+    .field{
+      display:flex;
+      flex-direction:column;
+      gap: 6px;
+      min-width: 0;
+    }
+    label{
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(170,182,214,0.95);
+    }
+    input[type="text"], input[type="number"], textarea, select{
+      width:100%;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      padding: 12px 12px;
+      outline:none;
+      font-size: 14px;
+      min-height: 44px;
+    }
+    textarea{ min-height: 96px; resize: vertical; }
+    input::placeholder, textarea::placeholder{ color: rgba(170,182,214,0.55); }
+
+    .row{
+      display:flex;
+      align-items:center;
+      gap: 10px;
+      flex-wrap:wrap;
+    }
+    .inline{
+      display:flex;
+      align-items:center;
+      gap: 10px;
+      min-height: 44px;
+    }
+    .chk{
+      display:inline-flex;
+      align-items:center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      user-select:none;
+    }
+    .chk input{ width: 18px; height: 18px; }
+
+    .hint{
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      margin-top: 2px;
+    }
+
+    /* Grocery list items editor */
+    .listItems{
+      display:flex;
+      flex-direction:column;
+      gap: 12px;
+    }
+    .listRow{
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      border-radius: 16px;
+      padding: 12px;
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    @media (min-width: 900px){
+      .listRow{
+        grid-template-columns: 1.3fr 0.7fr 0.9fr 1.3fr;
+        align-items:start;
+      }
+    }
+    .listRowActions{
+      display:flex;
+      justify-content:flex-end;
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    .hr{
+      height:1px;
+      background: rgba(255,255,255,0.10);
+      margin: 10px 0;
+    }
+
+    .empty{
+      padding: 12px;
+      border: 1px dashed rgba(255,255,255,0.18);
+      border-radius: 16px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .srOnly{
+      position:absolute;
+      width:1px; height:1px;
+      padding:0; margin:-1px;
+      overflow:hidden; clip:rect(0,0,0,0);
+      white-space:nowrap; border:0;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="card headerCard">
+      <div class="cardInner">
+        <h1>Feed Me</h1>
+        <div class="subtitle">I'm so Hungry</div>
+      </div>
+    </div>
+
+    <div class="card primary">
+      <div class="tabs" role="tablist" aria-label="Feed Me Tabs" id="tabs"></div>
+      <div class="panel" id="panel"></div>
+    </div>
+
+    <div class="card">
+      <div class="cardInner" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
+        <div style="display:flex;flex-direction:column;gap:4px;min-width:220px;">
+          <div style="font-weight:800;letter-spacing:0.2px;">Storage</div>
+          <div class="subtitle" style="margin:0;">Saves locally by default (localStorage). Optional PHP endpoints included in comments.</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <span class="chip" id="statFoods">Foods: 0</span>
+          <span class="chip" id="statRecipes">Recipes: 0</span>
+          <span class="chip" id="statLists">Grocery Lists: 0</span>
+          <button class="btn danger" id="btnReset" type="button" title="Clears all local data">Reset Local Data</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Host -->
+  <div class="modalOverlay" id="modalOverlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modalHead">
+        <h2 id="modalTitle">Modal</h2>
+        <button class="btn ghost" id="modalX" type="button">Close</button>
+      </div>
+      <div class="modalBody" id="modalBody"></div>
+      <div class="modalFoot" id="modalFoot"></div>
+    </div>
+  </div>
+
+  <!-- datalist for autofill -->
+  <datalist id="foodsDatalist"></datalist>
+
+  <script>
+    /*****************************************************************
+     * Feed Me — Mobile-first single-file app
+     * Default persistence: localStorage
+     * Optional PHP persistence: see bottom comment block
+     *****************************************************************/
+
+    const TABS = [
+      { key: "myFoods",  label: "My Foods" },
+      { key: "breakfast",label: "Breakfast" },
+      { key: "lunch",    label: "Lunch" },
+      { key: "dinner",   label: "Dinner" },
+      { key: "snacks",   label: "Snacks" },
+      { key: "groceries",label: "Groceries" },
+    ];
+
+    const STORAGE_KEY = "feedme_v1";
+
+    const state = loadState();
+
+    const elTabs = document.getElementById("tabs");
+    const elPanel = document.getElementById("panel");
+
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalFoot = document.getElementById("modalFoot");
+    const modalX = document.getElementById("modalX");
+
+    const statFoods = document.getElementById("statFoods");
+    const statRecipes = document.getElementById("statRecipes");
+    const statLists = document.getElementById("statLists");
+    const btnReset = document.getElementById("btnReset");
+
+    // ---------- Init ----------
+    let activeTab = state.ui?.activeTab || "myFoods";
+
+    renderTabs();
+    renderActivePanel();
+    refreshStatsAndDatalist();
+
+    modalX.addEventListener("click", () => closeModal());
+    modalOverlay.addEventListener("click", (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modalOverlay.classList.contains("show")) closeModal();
+    });
+
+    btnReset.addEventListener("click", () => {
+      if (!confirm("Reset all local Feed Me data? This cannot be undone.")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      location.reload();
+    });
+
+    // ---------- Rendering ----------
+    function renderTabs(){
+      elTabs.innerHTML = "";
+      for (const t of TABS){
+        const b = document.createElement("button");
+        b.className = "tabBtn";
+        b.type = "button";
+        b.role = "tab";
+        b.textContent = t.label;
+        b.setAttribute("aria-selected", String(t.key === activeTab));
+        b.addEventListener("click", () => {
+          activeTab = t.key;
+          state.ui = state.ui || {};
+          state.ui.activeTab = activeTab;
+          persist();
+          renderTabs();
+          renderActivePanel();
+        });
+        elTabs.appendChild(b);
+      }
+    }
+
+    function renderActivePanel(){
+      if (activeTab === "myFoods") return renderMyFoods();
+      if (activeTab === "groceries") return renderGroceries();
+      return renderRecipesTab(activeTab); // breakfast/lunch/dinner/snacks
+    }
+
+    // ---------- My Foods ----------
+    function renderMyFoods(){
+      elPanel.innerHTML = "";
+
+      const top = panelTopRow(
+        "Manage foods you like, don’t like, or are willing to try.",
+        [
+          { label:"+ Food Item", cls:"primary", onClick: () => openFoodItemModal() }
+        ]
+      );
+
+      const foodsCard = document.createElement("div");
+      foodsCard.className = "subCard";
+
+      const head = document.createElement("div");
+      head.className = "subHead";
+      head.innerHTML = `
+        <h3>Foods</h3>
+        <div class="row">
+          <span class="chip" title="Alphabetized by Name">Sorted A→Z</span>
+          <button class="btn ghost" type="button" id="btnAddRow">+ Item</button>
+        </div>
+      `;
+      foodsCard.appendChild(head);
+
+      const wrap = document.createElement("div");
+      wrap.className = "tableWrap";
+
+      const scroll = document.createElement("div");
+      scroll.className = "scrollBox";
+
+      const table = document.createElement("table");
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th style="width:64px;">#</th>
+            <th>Name</th>
+            <th style="width:92px;">Like</th>
+            <th style="width:120px;">Do Not Like</th>
+            <th style="width:140px;">Willing To Try</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="foodsTbody"></tbody>
+      `;
+
+      scroll.appendChild(table);
+      wrap.appendChild(scroll);
+      foodsCard.appendChild(wrap);
+
+      elPanel.appendChild(top);
+      elPanel.appendChild(foodsCard);
+
+      document.getElementById("btnAddRow").addEventListener("click", () => openQuickAddFoodNameModal());
+
+      renderFoodsTable();
+    }
+
+    function renderFoodsTable(){
+      const tbody = document.getElementById("foodsTbody");
+      if (!tbody) return;
+
+      const items = getFoodsSorted();
+      tbody.innerHTML = "";
+
+      if (items.length === 0){
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td colspan="6">
+            <div class="empty">No foods added yet. Tap <b>+ Food Item</b> or <b>+ Item</b> to begin.</div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+        return;
+      }
+
+      items.forEach((it, idx) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><span class="chip">${idx + 1}</span></td>
+          <td><b>${escapeHtml(it.name)}</b></td>
+          <td>${it.pref === "like" ? `<span class="badgeYes">YES</span>` : `<span class="badgeNo">NO</span>`}</td>
+          <td>${it.pref === "dislike" ? `<span class="badgeYes">YES</span>` : `<span class="badgeNo">NO</span>`}</td>
+          <td>${it.pref === "try" ? `<span class="badgeYes">YES</span>` : `<span class="badgeNo">NO</span>`}</td>
+          <td><small>${it.notes ? escapeHtml(it.notes) : ""}</small></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function openFoodItemModal(existing){
+      const isEdit = !!existing;
+      const model = existing ? deepClone(existing) : {
+        id: cryptoId(),
+        name: "",
+        pref: "none", // "like" | "dislike" | "try" | "none"
+        notes: "",
+        createdAt: Date.now()
+      };
+
+      openModal({
+        title: isEdit ? "Edit Food Item" : "Add Food Item",
+        body: () => {
+          const box = document.createElement("div");
+          box.innerHTML = `
+            <div class="grid5">
+              <div class="field">
+                <label>Name</label>
+                <input type="text" id="foodName" placeholder="e.g., Broccoli" value="${escapeAttr(model.name)}" />
+                <div class="hint">Single line food name.</div>
+              </div>
+
+              <div class="field">
+                <label>Like</label>
+                <div class="inline">
+                  <label class="chk">
+                    <input type="checkbox" id="chkLike" ${model.pref==="like" ? "checked" : ""} />
+                    <span>Yes</span>
+                  </label>
+                </div>
+                <div class="hint">Select one preference.</div>
+              </div>
+
+              <div class="field">
+                <label>Do Not Like</label>
+                <div class="inline">
+                  <label class="chk">
+                    <input type="checkbox" id="chkDislike" ${model.pref==="dislike" ? "checked" : ""} />
+                    <span>Yes</span>
+                  </label>
+                </div>
+                <div class="hint">Select one preference.</div>
+              </div>
+
+              <div class="field">
+                <label>Willing to Try</label>
+                <div class="inline">
+                  <label class="chk">
+                    <input type="checkbox" id="chkTry" ${model.pref==="try" ? "checked" : ""} />
+                    <span>Yes</span>
+                  </label>
+                </div>
+                <div class="hint">Select one preference.</div>
+              </div>
+
+              <div class="field">
+                <label>Notes</label>
+                <textarea id="foodNotes" placeholder="e.g., I only eat it cooked.">${escapeHtml(model.notes || "")}</textarea>
+                <div class="hint">Extra info about the food item.</div>
+              </div>
+            </div>
+          `;
+
+          // Exclusive checkbox enforcement
+          const chkLike = box.querySelector("#chkLike");
+          const chkDislike = box.querySelector("#chkDislike");
+          const chkTry = box.querySelector("#chkTry");
+
+          function applyExclusive(){
+            const picked = chkLike.checked ? "like" : chkDislike.checked ? "dislike" : chkTry.checked ? "try" : "none";
+            model.pref = picked;
+
+            const any = picked !== "none";
+            chkLike.disabled = any && picked !== "like";
+            chkDislike.disabled = any && picked !== "dislike";
+            chkTry.disabled = any && picked !== "try";
+          }
+
+          [chkLike, chkDislike, chkTry].forEach(chk => {
+            chk.addEventListener("change", () => {
+              // if turning one on, turn others off
+              if (chk === chkLike && chkLike.checked){ chkDislike.checked = false; chkTry.checked = false; }
+              if (chk === chkDislike && chkDislike.checked){ chkLike.checked = false; chkTry.checked = false; }
+              if (chk === chkTry && chkTry.checked){ chkLike.checked = false; chkDislike.checked = false; }
+              applyExclusive();
+            });
+          });
+
+          applyExclusive();
+          return box;
+        },
+        footer: ({ close }) => {
+          const btnClose = mkBtn("Close", "ghost", () => close());
+          const btnSubmit = mkBtn("Submit", "primary", () => {
+            const name = (document.getElementById("foodName").value || "").trim();
+            const notes = (document.getElementById("foodNotes").value || "").trim();
+
+            if (!name){
+              alert("Name is required for a Food Item.");
+              return;
+            }
+
+            model.name = name;
+            model.notes = notes;
+
+            upsertFood(model);
+            close();
+
+            refreshStatsAndDatalist();
+            renderFoodsTable();
+          });
+
+          return [btnClose, btnSubmit];
+        }
+      });
+    }
+
+    function openQuickAddFoodNameModal(){
+      openModal({
+        title: "Add Item",
+        body: () => {
+          const box = document.createElement("div");
+          box.innerHTML = `
+            <div class="field">
+              <label>Name</label>
+              <input type="text" id="quickFoodName" placeholder="e.g., Broccoli" />
+              <div class="hint">Adds a new row to Foods (preference defaults to No).</div>
+            </div>
+          `;
+          setTimeout(() => box.querySelector("#quickFoodName").focus(), 0);
+          return box;
+        },
+        footer: ({ close }) => {
+          const btnClose = mkBtn("Close", "ghost", () => close());
+          const btnSubmit = mkBtn("Submit", "primary", () => {
+            const name = (document.getElementById("quickFoodName").value || "").trim();
+            if (!name){ close(); return; }
+
+            upsertFood({
+              id: cryptoId(),
+              name,
+              pref: "none",
+              notes: "",
+              createdAt: Date.now()
+            });
+            close();
+
+            refreshStatsAndDatalist();
+            renderFoodsTable();
+          });
+          return [btnClose, btnSubmit];
+        }
+      });
+    }
+
+    function upsertFood(item){
+      // If same name already exists (case-insensitive), update that record instead of duplicating
+      const idx = state.foods.findIndex(x => x.name.trim().toLowerCase() === item.name.trim().toLowerCase());
+      if (idx >= 0){
+        // preserve original id/createdAt; update preference/notes if provided
+        const existing = state.foods[idx];
+        state.foods[idx] = {
+          ...existing,
+          ...item,
+          id: existing.id,
+          createdAt: existing.createdAt
+        };
+      } else {
+        state.foods.push(item);
+      }
+      persist();
+    }
+
+    function getFoodsSorted(){
+      return [...state.foods].sort((a,b) => a.name.localeCompare(b.name, undefined, { sensitivity:"base" }));
+    }
+
+    // ---------- Recipes Tabs ----------
+    function renderRecipesTab(mealKey){
+      elPanel.innerHTML = "";
+
+      const label = TABS.find(t => t.key === mealKey)?.label || "Recipes";
+      const recipes = state.recipes[mealKey] || [];
+
+      const top = panelTopRow(
+        `Store ${label.toLowerCase()} recipes. Tap a card to view or edit.`,
+        [
+          { label:"+ Recipe", cls:"primary", onClick: () => openRecipeModal(mealKey) }
+        ]
+      );
+
+      elPanel.appendChild(top);
+
+      if (recipes.length === 0){
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.innerHTML = `No recipes yet. Tap <b>+ Recipe</b> to add your first ${escapeHtml(label.toLowerCase())} recipe.`;
+        elPanel.appendChild(empty);
+        return;
+      }
+
+      const cards = document.createElement("div");
+      cards.className = "cards";
+
+      recipes
+        .slice()
+        .sort((a,b) => (b.updatedAt||b.createdAt) - (a.updatedAt||a.createdAt))
+        .forEach(r => {
+          const c = document.createElement("div");
+          c.className = "miniCard";
+          c.addEventListener("click", () => openRecipeViewerModal(mealKey, r.id));
+
+          const dt = new Date(r.updatedAt || r.createdAt);
+          c.innerHTML = `
+            <div class="miniTop">
+              <h4 class="miniTitle">${escapeHtml(r.title || "(Untitled Recipe)")}</h4>
+              <div class="miniMeta">${fmtDateTime(dt)}</div>
+            </div>
+            <div class="miniBody">
+              ${recipePreviewHtml(r)}
+            </div>
+          `;
+          cards.appendChild(c);
+        });
+
+      elPanel.appendChild(cards);
+    }
+
+    function openRecipeModal(mealKey, existing){
+      const isEdit = !!existing;
+      const model = existing ? deepClone(existing) : {
+        id: cryptoId(),
+        title: "",
+        servings: "",
+        time: "",
+        ingredients: "",
+        steps: "",
+        notes: "",
+        createdAt: Date.now(),
+        updatedAt: null
+      };
+
+      openModal({
+        title: isEdit ? "Edit Recipe" : "Add Recipe",
+        body: () => {
+          const box = document.createElement("div");
+          box.innerHTML = `
+            <div class="field">
+              <label>Recipe Name</label>
+              <input type="text" id="rTitle" placeholder="e.g., Chicken & Rice Bowl" value="${escapeAttr(model.title)}" />
+            </div>
+
+            <div class="row" style="margin-top:12px;">
+              <div class="field" style="flex:1;min-width:180px;">
+                <label>Servings</label>
+                <input type="text" id="rServings" placeholder="e.g., 2" value="${escapeAttr(model.servings)}" />
+              </div>
+              <div class="field" style="flex:1;min-width:180px;">
+                <label>Total Time</label>
+                <input type="text" id="rTime" placeholder="e.g., 25 minutes" value="${escapeAttr(model.time)}" />
+              </div>
+            </div>
+
+            <div class="field" style="margin-top:12px;">
+              <label>Ingredients</label>
+              <textarea id="rIngredients" placeholder="One item per line. Use suggestions from My Foods while typing.">${escapeHtml(model.ingredients || "")}</textarea>
+              <div class="hint">Tip: Start typing a food name to use autofill suggestions.</div>
+            </div>
+
+            <div class="field" style="margin-top:12px;">
+              <label>Steps</label>
+              <textarea id="rSteps" placeholder="How to make it...">${escapeHtml(model.steps || "")}</textarea>
+            </div>
+
+            <div class="field" style="margin-top:12px;">
+              <label>Notes</label>
+              <textarea id="rNotes" placeholder="Any extra notes...">${escapeHtml(model.notes || "")}</textarea>
+            </div>
+          `;
+
+          // Attach datalist-based suggestion behavior for ingredients
+          attachDatalistToTextareaLines(box.querySelector("#rIngredients"));
+
+          return box;
+        },
+        footer: ({ close }) => {
+          const btnClose = mkBtn("Close", "ghost", () => close());
+          const btnSave = mkBtn("Save", "primary", () => {
+            model.title = (document.getElementById("rTitle").value || "").trim();
+            model.servings = (document.getElementById("rServings").value || "").trim();
+            model.time = (document.getElementById("rTime").value || "").trim();
+            model.ingredients = (document.getElementById("rIngredients").value || "").trim();
+            model.steps = (document.getElementById("rSteps").value || "").trim();
+            model.notes = (document.getElementById("rNotes").value || "").trim();
+
+            if (isEdit){
+              model.updatedAt = Date.now();
+              updateRecipe(mealKey, model);
+            } else {
+              addRecipe(mealKey, model);
+            }
+
+            close();
+            refreshStatsAndDatalist();
+            renderActivePanel();
+          });
+
+          return [btnClose, btnSave];
+        }
+      });
+    }
+
+    function openRecipeViewerModal(mealKey, id){
+      const r = (state.recipes[mealKey] || []).find(x => x.id === id);
+      if (!r) return;
+
+      openModal({
+        title: r.title || "(Untitled Recipe)",
+        body: () => {
+          const box = document.createElement("div");
+          const dt = new Date(r.updatedAt || r.createdAt);
+          box.innerHTML = `
+            <div class="row" style="justify-content:space-between;gap:10px;margin-bottom:10px;">
+              <div class="chip">${fmtDateTime(dt)}</div>
+              <div class="chip">${escapeHtml(TABS.find(t=>t.key===mealKey)?.label || mealKey)}</div>
+            </div>
+
+            <div class="subCard" style="padding:12px;">
+              ${viewerField("Servings", r.servings)}
+              ${viewerField("Total Time", r.time)}
+              <div class="hr"></div>
+              ${viewerBlock("Ingredients", r.ingredients)}
+              ${viewerBlock("Steps", r.steps)}
+              ${viewerBlock("Notes", r.notes)}
+            </div>
+          `;
+          return box;
+        },
+        footer: ({ close }) => {
+          const btnClose = mkBtn("Close", "ghost", () => close());
+          const btnEdit = mkBtn("Edit", "primary", () => {
+            close();
+            openRecipeModal(mealKey, r);
+          });
+          return [btnClose, btnEdit];
+        }
+      });
+    }
+
+    function addRecipe(mealKey, recipe){
+      state.recipes[mealKey] = state.recipes[mealKey] || [];
+      state.recipes[mealKey].push(recipe);
+      persist();
+    }
+    function updateRecipe(mealKey, recipe){
+      const list = state.recipes[mealKey] || [];
+      const idx = list.findIndex(x => x.id === recipe.id);
+      if (idx >= 0) list[idx] = recipe;
+      persist();
+    }
+
+    function recipePreviewHtml(r){
+      const lines = [];
+      if (r.time) lines.push(`<div><span class="muted">Time:</span> ${escapeHtml(r.time)}</div>`);
+      if (r.servings) lines.push(`<div><span class="muted">Serves:</span> ${escapeHtml(r.servings)}</div>`);
+      if (r.ingredients) lines.push(`<div style="margin-top:6px;"><span class="muted">Ingredients:</span><br>${escapeHtml(snippetLines(r.ingredients, 6)).replaceAll("\n","<br>")}</div>`);
+      if (r.steps) lines.push(`<div style="margin-top:6px;"><span class="muted">Steps:</span><br>${escapeHtml(snippetLines(r.steps, 4)).replaceAll("\n","<br>")}</div>`);
+      if (lines.length === 0) return `<div class="muted">No details yet.</div>`;
+      return lines.join("");
+    }
+
+    // ---------- Groceries ----------
+    function renderGroceries(){
+      elPanel.innerHTML = "";
+
+      const top = panelTopRow(
+        "Create grocery lists. Tap a list card to view or edit.",
+        [
+          { label:"+ New List", cls:"primary", onClick: () => openGroceryListModal() }
+        ]
+      );
+
+      elPanel.appendChild(top);
+
+      const lists = state.groceryLists
+        .slice()
+        .sort((a,b) => (b.updatedAt||b.createdAt) - (a.updatedAt||a.createdAt));
+
+      if (lists.length === 0){
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.innerHTML = `No grocery lists yet. Tap <b>+ New List</b> to create one.`;
+        elPanel.appendChild(empty);
+        return;
+      }
+
+      const cards = document.createElement("div");
+      cards.className = "cards";
+
+      lists.forEach(list => {
+        const c = document.createElement("div");
+        c.className = "miniCard";
+        c.addEventListener("click", () => openGroceryViewerModal(list.id));
+
+        const dt = new Date(list.updatedAt || list.createdAt);
+        const count = list.items?.length || 0;
+
+        c.innerHTML = `
+          <div class="miniTop">
+            <h4 class="miniTitle">Grocery List</h4>
+            <div class="miniMeta">${fmtDateTime(dt)}</div>
+          </div>
+          <div class="miniBody">
+            <div><span class="muted">Items:</span> ${count}</div>
+            <div style="margin-top:6px;">
+              ${groceryPreviewHtml(list)}
+            </div>
+          </div>
+        `;
+        cards.appendChild(c);
+      });
+
+      elPanel.appendChild(cards);
+    }
+
+    function openGroceryListModal(existing){
+      const isEdit = !!existing;
+      const model = existing ? deepClone(existing) : {
+        id: cryptoId(),
+        createdAt: Date.now(),
+        updatedAt: null,
+        items: []
+      };
+
+      openModal({
+        title: isEdit ? "Edit Grocery List" : "New Grocery List",
+        body: () => {
+          const box = document.createElement("div");
+
+          const topRow = document.createElement("div");
+          topRow.className = "panelTop";
+          topRow.innerHTML = `
+            <div class="panelTitle">Add items (name, quantity, unit, notes). Autofill from My Foods while typing item names.</div>
+            <div class="actions">
+              <button class="btn ghost" type="button" id="btnAddGItem">+ New Item</button>
+            </div>
+          `;
+
+          const itemsWrap = document.createElement("div");
+          itemsWrap.className = "listItems";
+          itemsWrap.id = "gItemsWrap";
+
+          box.appendChild(topRow);
+          box.appendChild(itemsWrap);
+
+          document.addEventListener("click", docAddItemClickOnce, { once: true });
+          function docAddItemClickOnce(){
+            // no-op: avoids accidental “double open” if modal opens via click
+          }
+
+          setTimeout(() => {
+            const btn = box.querySelector("#btnAddGItem");
+            btn.addEventListener("click", () => {
+              model.items.push(blankGroceryItem());
+              renderGroceryItemEditor(model);
+            });
+            // start with 1 row if empty (reasonable)
+            if (!model.items.length) model.items.push(blankGroceryItem());
+            renderGroceryItemEditor(model);
+          }, 0);
+
+          function renderGroceryItemEditor(m){
+            const wrap = box.querySelector("#gItemsWrap");
+            wrap.innerHTML = "";
+
+            m.items.forEach((it, idx) => {
+              const row = document.createElement("div");
+              row.className = "listRow";
+              row.innerHTML = `
+                <div class="field">
+                  <label>Item</label>
+                  <input type="text" data-k="name" data-i="${idx}" list="foodsDatalist" placeholder="e.g., Milk" value="${escapeAttr(it.name)}" />
+                </div>
+
+                <div class="field">
+                  <label>Qty</label>
+                  <input type="number" step="0.01" data-k="qty" data-i="${idx}" placeholder="e.g., 2" value="${escapeAttr(it.qty)}" />
+                </div>
+
+                <div class="field">
+                  <label>Unit</label>
+                  <select data-k="unit" data-i="${idx}">
+                    ${unitOptions(it.unit)}
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>Notes</label>
+                  <textarea data-k="notes" data-i="${idx}" placeholder="Optional...">${escapeHtml(it.notes||"")}</textarea>
+                </div>
+              `;
+
+              const actions = document.createElement("div");
+              actions.className = "listRowActions";
+              actions.style.gridColumn = "1 / -1";
+              actions.innerHTML = `
+                <button class="btn ghost" type="button" data-act="dup" data-i="${idx}">Duplicate</button>
+                <button class="btn danger" type="button" data-act="del" data-i="${idx}">Remove</button>
+              `;
+              row.appendChild(actions);
+
+              wrap.appendChild(row);
+            });
+
+            // wire change events
+            wrap.querySelectorAll("input, textarea, select").forEach(inp => {
+              inp.addEventListener("input", () => {
+                const i = +inp.dataset.i;
+                const k = inp.dataset.k;
+                if (k === "notes") model.items[i][k] = inp.value;
+                else model.items[i][k] = (inp.value || "");
+              });
+              inp.addEventListener("change", () => {
+                const i = +inp.dataset.i;
+                const k = inp.dataset.k;
+                model.items[i][k] = (inp.value || "");
+              });
+            });
+
+            wrap.querySelectorAll("button[data-act]").forEach(b => {
+              b.addEventListener("click", () => {
+                const i = +b.dataset.i;
+                const act = b.dataset.act;
+                if (act === "del"){
+                  model.items.splice(i, 1);
+                  if (!model.items.length) model.items.push(blankGroceryItem());
+                  renderGroceryItemEditor(model);
+                }
+                if (act === "dup"){
+                  model.items.splice(i+1, 0, deepClone(model.items[i]));
+                  renderGroceryItemEditor(model);
+                }
+              });
+            });
+          }
+
+          return box;
+        },
+        footer: ({ close }) => {
+          const btnBack = mkBtn("Go Back", "ghost", () => close());
+          const btnSave = mkBtn("Save", "primary", () => {
+            // filter out completely blank rows
+            model.items = (model.items || []).filter(it => {
+              const hasName = (it.name || "").trim().length > 0;
+              const hasQty = (it.qty || "").toString().trim().length > 0;
+              const hasNotes = (it.notes || "").trim().length > 0;
+              return hasName || hasQty || hasNotes;
+            });
+
+            if (isEdit){
+              model.updatedAt = Date.now();
+              updateGroceryList(model);
+            } else {
+              addGroceryList(model);
+            }
+
+            close();
+            refreshStatsAndDatalist();
+            renderActivePanel();
+          });
+
+          return [btnBack, btnSave];
+        }
+      });
+    }
+
+    function openGroceryViewerModal(id){
+      const list = state.groceryLists.find(x => x.id === id);
+      if (!list) return;
+
+      const dt = new Date(list.updatedAt || list.createdAt);
+
+      openModal({
+        title: "Grocery List",
+        body: () => {
+          const box = document.createElement("div");
+          box.innerHTML = `
+            <div class="row" style="justify-content:space-between;gap:10px;margin-bottom:10px;">
+              <div class="chip">${fmtDateTime(dt)}</div>
+              <div class="chip">Items: ${list.items?.length || 0}</div>
+            </div>
+            <div class="subCard" style="padding:12px;">
+              ${renderGroceryItemsReadonly(list)}
+            </div>
+          `;
+          return box;
+        },
+        footer: ({ close }) => {
+          const btnClose = mkBtn("Close", "ghost", () => close());
+          const btnEdit = mkBtn("Edit", "primary", () => {
+            close();
+            openGroceryListModal(list);
+          });
+          return [btnClose, btnEdit];
+        }
+      });
+    }
+
+    function addGroceryList(list){
+      state.groceryLists.push(list);
+      persist();
+    }
+    function updateGroceryList(list){
+      const idx = state.groceryLists.findIndex(x => x.id === list.id);
+      if (idx >= 0) state.groceryLists[idx] = list;
+      persist();
+    }
+
+    function groceryPreviewHtml(list){
+      const items = (list.items || []).slice(0, 6);
+      if (items.length === 0) return `<div class="muted">No items.</div>`;
+      return `
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          ${items.map(it => {
+            const name = it.name ? escapeHtml(it.name) : "<span class='muted'>(Unnamed)</span>";
+            const qty = it.qty ? escapeHtml(String(it.qty)) : "";
+            const unit = it.unit ? escapeHtml(it.unit) : "";
+            const meta = [qty, unit].filter(Boolean).join(" ");
+            return `<div>• ${name}${meta ? ` <span class="muted">(${meta})</span>` : ""}</div>`;
+          }).join("")}
+          ${(list.items||[]).length > items.length ? `<div class="muted">…and more</div>` : ""}
+        </div>
+      `;
+    }
+
+    function renderGroceryItemsReadonly(list){
+      const items = list.items || [];
+      if (items.length === 0) return `<div class="muted">No items.</div>`;
+      return `
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${items.map((it, idx) => {
+            const name = escapeHtml(it.name || "");
+            const qty = escapeHtml((it.qty ?? "").toString());
+            const unit = escapeHtml(it.unit || "");
+            const notes = escapeHtml(it.notes || "");
+            return `
+              <div class="subCard" style="padding:12px;">
+                <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+                  <div style="font-weight:800;">${idx + 1}. ${name || "<span class='muted'>(Unnamed)</span>"}</div>
+                  <div class="chip">${[qty, unit].filter(Boolean).join(" ") || "—"}</div>
+                </div>
+                ${notes ? `<div style="margin-top:8px;color:rgba(234,240,255,0.9);"><span class="muted">Notes:</span> ${notes}</div>` : `<div class="muted" style="margin-top:8px;">No notes.</div>`}
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function blankGroceryItem(){
+      return { name:"", qty:"", unit:"", notes:"" };
+    }
+    function unitOptions(selected){
+      const units = ["", "lbs", "oz", "cups", "bottles", "containers", "packages", "count", "bags", "boxes"];
+      return units.map(u => `<option value="${escapeAttr(u)}" ${u===selected ? "selected" : ""}>${u || "—"}</option>`).join("");
+    }
+
+    // ---------- Modal Helpers ----------
+    function openModal({ title, body, footer }){
+      modalTitle.textContent = title;
+      modalBody.innerHTML = "";
+      modalFoot.innerHTML = "";
+
+      const close = () => closeModal();
+
+      const bodyNode = body?.();
+      if (bodyNode) modalBody.appendChild(bodyNode);
+
+      const footNodes = footer?.({ close }) || [];
+      footNodes.forEach(n => modalFoot.appendChild(n));
+
+      modalOverlay.classList.add("show");
+      modalOverlay.setAttribute("aria-hidden", "false");
+
+      // focus first input if present
+      setTimeout(() => {
+        const first = modalBody.querySelector("input, textarea, select, button");
+        if (first) first.focus();
+      }, 0);
+    }
+
+    function closeModal(){
+      modalOverlay.classList.remove("show");
+      modalOverlay.setAttribute("aria-hidden", "true");
+      modalBody.innerHTML = "";
+      modalFoot.innerHTML = "";
+    }
+
+    function mkBtn(text, cls, onClick){
+      const b = document.createElement("button");
+      b.className = "btn " + (cls || "");
+      b.type = "button";
+      b.textContent = text;
+      b.addEventListener("click", onClick);
+      return b;
+    }
+
+    function panelTopRow(desc, buttons){
+      const top = document.createElement("div");
+      top.className = "panelTop";
+
+      const left = document.createElement("div");
+      left.className = "panelTitle";
+      left.textContent = desc;
+
+      const right = document.createElement("div");
+      right.className = "actions";
+
+      (buttons || []).forEach(btn => {
+        const b = document.createElement("button");
+        b.className = "btn " + (btn.cls || "ghost");
+        b.type = "button";
+        b.textContent = btn.label;
+        b.addEventListener("click", btn.onClick);
+        right.appendChild(b);
+      });
+
+      top.appendChild(left);
+      top.appendChild(right);
+      return top;
+    }
+
+    // ---------- Autofill ----------
+    function refreshFoodsDatalist(){
+      const dl = document.getElementById("foodsDatalist");
+      dl.innerHTML = "";
+      const foods = getFoodsSorted();
+      foods.forEach(f => {
+        const opt = document.createElement("option");
+        opt.value = f.name;
+        dl.appendChild(opt);
+      });
+    }
+
+    // For a textarea where user enters "one item per line", we provide a lightweight helper:
+    // When user presses Tab, attempt to autocomplete current line from datalist-like matching.
+    function attachDatalistToTextareaLines(textarea){
+      if (!textarea) return;
+
+      textarea.addEventListener("keydown", (e) => {
+        if (e.key !== "Tab") return;
+
+        const foods = getFoodsSorted().map(x => x.name);
+        if (!foods.length) return;
+
+        const { value, selectionStart } = textarea;
+        const before = value.slice(0, selectionStart);
+        const after = value.slice(selectionStart);
+
+        const lineStart = before.lastIndexOf("\n") + 1;
+        const line = before.slice(lineStart);
+        const typed = line.trim();
+
+        if (!typed) return;
+
+        const match = foods.find(n => n.toLowerCase().startsWith(typed.toLowerCase()));
+        if (!match) return;
+
+        e.preventDefault();
+
+        const newBefore = before.slice(0, lineStart) + match;
+        textarea.value = newBefore + after;
+
+        const newPos = newBefore.length;
+        textarea.setSelectionRange(newPos, newPos);
+      });
+    }
+
+    // ---------- Stats + Persistence ----------
+    function refreshStatsAndDatalist(){
+      statFoods.textContent = "Foods: " + state.foods.length;
+
+      const recipeCount =
+        (state.recipes.breakfast?.length || 0) +
+        (state.recipes.lunch?.length || 0) +
+        (state.recipes.dinner?.length || 0) +
+        (state.recipes.snacks?.length || 0);
+
+      statRecipes.textContent = "Recipes: " + recipeCount;
+      statLists.textContent = "Grocery Lists: " + state.groceryLists.length;
+
+      refreshFoodsDatalist();
+    }
+
+    function persist(){
+      try{
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e){
+        console.warn("Persist failed:", e);
+      }
+    }
+
+    function loadState(){
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw){
+        try{
+          const parsed = JSON.parse(raw);
+          return normalizeState(parsed);
+        } catch {}
+      }
+      return normalizeState({});
+    }
+
+    function normalizeState(s){
+      return {
+        ui: s.ui || { activeTab: "myFoods" },
+        foods: Array.isArray(s.foods) ? s.foods : [],
+        recipes: {
+          breakfast: Array.isArray(s.recipes?.breakfast) ? s.recipes.breakfast : [],
+          lunch: Array.isArray(s.recipes?.lunch) ? s.recipes.lunch : [],
+          dinner: Array.isArray(s.recipes?.dinner) ? s.recipes.dinner : [],
+          snacks: Array.isArray(s.recipes?.snacks) ? s.recipes.snacks : [],
+        },
+        groceryLists: Array.isArray(s.groceryLists) ? s.groceryLists : [],
+      };
+    }
+
+    // ---------- Utilities ----------
+    function cryptoId(){
+      if (crypto?.randomUUID) return crypto.randomUUID();
+      return "id_" + Math.random().toString(16).slice(2) + "_" + Date.now();
+    }
+
+    function fmtDateTime(d){
+      // user-friendly, device locale
+      try{
+        return d.toLocaleString(undefined, { year:"numeric", month:"short", day:"2-digit", hour:"numeric", minute:"2-digit" });
+      } catch {
+        return d.toString();
+      }
+    }
+
+    function deepClone(obj){
+      return JSON.parse(JSON.stringify(obj));
+    }
+
+    function snippetLines(text, maxLines){
+      const lines = String(text || "").split(/\r?\n/).filter(Boolean);
+      return lines.slice(0, maxLines).join("\n") + (lines.length > maxLines ? "\n…" : "");
+    }
+
+    function viewerField(label, value){
+      const v = (value || "").trim();
+      return `
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+          <div class="muted">${escapeHtml(label)}:</div>
+          <div style="font-weight:800;">${v ? escapeHtml(v) : "—"}</div>
+        </div>
+      `;
+    }
+
+    function viewerBlock(label, value){
+      const v = (value || "").trim();
+      return `
+        <div style="margin-top:12px;">
+          <div class="muted" style="margin-bottom:6px;">${escapeHtml(label)}:</div>
+          <div style="white-space:pre-wrap;line-height:1.45;">${v ? escapeHtml(v) : "—"}</div>
+        </div>
+      `;
+    }
+
+    function escapeHtml(str){
+      return String(str ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#39;");
+    }
+    function escapeAttr(str){
+      return escapeHtml(str).replaceAll("\n"," ");
+    }
+
+  </script>
+</body>
+</html>
