@@ -1487,7 +1487,7 @@ btn.addEventListener("click", () => {
           return box;
         },
         footer: ({ close }) => {
-          const btnClose = mkBtn("Close", "ghost", () => { close(); }
+          const btnClose = mkBtn("Close", "ghost", () => { close(); openRecipeModal(mealKey, r); }
           const btnEdit = mkBtn("Edit", "primary", () => {
             close();
             openRecipeModal(mealKey, r);
@@ -1750,7 +1750,7 @@ if (lines.length === 0) return `<div class="muted">No details yet.</div>`;
           return box;
         },
         footer: ({ close }) => {
-          const btnClose = mkBtn("Close", "ghost", () => { close(); }
+          const btnClose = mkBtn("Close", "ghost", () => { close(); openRecipeModal(mealKey, r); }
           const btnEdit = mkBtn("Edit", "primary", () => {
             close();
             openGroceryListModal(list);
