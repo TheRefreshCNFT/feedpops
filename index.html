@@ -279,6 +279,32 @@
       font-size: 12px;
     }
 
+    .cellInput, .cellNotes{
+  width: 100%;
+  min-height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+  padding: 10px 10px;
+  font-size: 14px;
+  outline: none;
+}
+.cellNotes{ min-height: 44px; resize: vertical; }
+
+.cellChk{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap: 8px;
+  min-height: 40px;
+}
+.cellChk input{
+  width: 18px;
+  height: 18px;
+}
+
+
     /* Cards grid for recipes/lists */
     .cards{
       display:grid;
@@ -547,7 +573,6 @@
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modalHead">
         <h2 id="modalTitle">Modal</h2>
-        <button class="btn ghost" id="modalX" type="button">Close</button>
       </div>
       <div class="modalBody" id="modalBody"></div>
       <div class="modalFoot" id="modalFoot"></div>
@@ -584,8 +609,7 @@
     const modalTitle = document.getElementById("modalTitle");
     const modalBody = document.getElementById("modalBody");
     const modalFoot = document.getElementById("modalFoot");
-    const modalX = document.getElementById("modalX");
-
+    
     const statFoods = document.getElementById("statFoods");
     const statRecipes = document.getElementById("statRecipes");
     const statLists = document.getElementById("statLists");
@@ -598,7 +622,6 @@
     renderActivePanel();
     refreshStatsAndDatalist();
 
-    modalX.addEventListener("click", () => closeModal());
     modalOverlay.addEventListener("click", (e) => {
       if (e.target === modalOverlay) closeModal();
     });
@@ -717,7 +740,50 @@
 
       items.forEach((it, idx) => {
         const tr = document.createElement("tr");
+        const isBlank = (it.pref === "none") && !(it.notes || "").trim();
+
+        if (isBlank){
   tr.innerHTML = `
+    <td><span class="chip">${idx + 1}</span></td>
+
+    <td>
+      <input class="cellInput" type="text" value="${escapeAttr(it.name)}" data-id="${it.id}" data-k="name" />
+    </td>
+
+    <td>
+      <div class="cellChk">
+        <input type="checkbox" data-id="${it.id}" data-k="like" />
+      </div>
+    </td>
+
+    <td>
+      <div class="cellChk">
+        <input type="checkbox" data-id="${it.id}" data-k="dislike" />
+      </div>
+    </td>
+
+    <td>
+      <div class="cellChk">
+        <input type="checkbox" data-id="${it.id}" data-k="try" />
+      </div>
+    </td>
+
+    <td>
+      <textarea class="cellNotes" data-id="${it.id}" data-k="notes" placeholder="Optional...">${escapeHtml(it.notes || "")}</textarea>
+    </td>
+
+    <td>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="iconBtn" type="button" data-act="edit" title="Edit" aria-label="Edit">✎</button>
+        <button class="iconBtn danger" type="button" data-act="del" title="Delete" aria-label="Delete">🗑</button>
+      </div>
+    </td>
+  `;
+
+  wireInlineFoodRow(tr, it.id);
+}
+
+          tr.innerHTML = `
   <td><span class="chip">${idx + 1}</span></td>
   <td><b>${escapeHtml(it.name)}</b></td>
   <td>${it.pref === "like" ? `<span class="badgeYes">YES</span>` : `<span class="badgeNo">NO</span>`}</td>
@@ -751,6 +817,99 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
         tbody.appendChild(tr);
       });
     }
+
+    function wireInlineFoodRow(tr, id){
+  const nameEl = tr.querySelector('input[data-k="name"]');
+  const notesEl = tr.querySelector('textarea[data-k="notes"]');
+
+  const likeEl = tr.querySelector('input[data-k="like"]');
+  const dislikeEl = tr.querySelector('input[data-k="dislike"]');
+  const tryEl = tr.querySelector('input[data-k="try"]');
+
+  function applyExclusive(){
+    const picked =
+      likeEl.checked ? "like" :
+      dislikeEl.checked ? "dislike" :
+      tryEl.checked ? "try" : "none";
+
+    const any = picked !== "none";
+    likeEl.disabled = any && picked !== "like";
+    dislikeEl.disabled = any && picked !== "dislike";
+    tryEl.disabled = any && picked !== "try";
+
+    return picked;
+  }
+
+  function save(){
+    const newName = (nameEl.value || "").trim();
+    const newNotes = (notesEl.value || "").trim();
+    const pref = applyExclusive();
+
+    // Require name to keep row valid
+    if (!newName) return;
+
+    // Prevent accidental duplicates by name (case-insensitive) across different IDs
+    const dup = state.foods.find(f => f.id !== id && f.name.trim().toLowerCase() === newName.toLowerCase());
+    if (dup){
+      alert(`"${newName}" already exists.`);
+      // revert visible name to stored value
+      const cur = state.foods.find(f => f.id === id);
+      nameEl.value = cur ? cur.name : newName;
+      return;
+    }
+
+    updateFoodById(id, { name: newName, notes: newNotes, pref });
+
+    refreshStatsAndDatalist();
+    renderFoodsTable(); // re-sorts and updates numbering
+  }
+
+  // Save on click-away
+  nameEl.addEventListener("blur", save);
+  notesEl.addEventListener("blur", save);
+
+  // Save on Enter (Name)
+  nameEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter"){
+      e.preventDefault();
+      nameEl.blur(); // triggers save
+    }
+  });
+
+  // Checkboxes: enforce exclusivity + save
+  function onPick(which){
+    if (which === "like" && likeEl.checked){ dislikeEl.checked = false; tryEl.checked = false; }
+    if (which === "dislike" && dislikeEl.checked){ likeEl.checked = false; tryEl.checked = false; }
+    if (which === "try" && tryEl.checked){ likeEl.checked = false; dislikeEl.checked = false; }
+    applyExclusive();
+    save();
+  }
+
+  likeEl.addEventListener("change", () => onPick("like"));
+  dislikeEl.addEventListener("change", () => onPick("dislike"));
+  tryEl.addEventListener("change", () => onPick("try"));
+
+  // Initial state
+  applyExclusive();
+
+  // Keep your existing action buttons behavior
+  tr.querySelector('[data-act="edit"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    const it = state.foods.find(x => x.id === id);
+    if (it) openFoodItemModal(it);
+  });
+
+  tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    const it = state.foods.find(x => x.id === id);
+    const nm = it?.name || "this item";
+    if (!confirm(`Delete "${nm}"?`)) return;
+    deleteFoodById(id);
+    refreshStatsAndDatalist();
+    renderFoodsTable();
+  });
+}
+
 
     function openFoodItemModal(existing){
       const isEdit = !!existing;
@@ -830,54 +989,6 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
             chkTry.disabled = any && picked !== "try";
           }
 
-          const elName = box.querySelector("#foodName");
-          const elNotes = box.querySelector("#foodNotes");
-          
-          let saveTimer = null;
-          
-          function readIntoModel(){
-          model.name = (elName.value || "").trim();
-          model.notes = (elNotes.value || "").trim();
-          }
-          
-          function saveNow(){
-          readIntoModel();
-          
-          // Only save once Name exists (but inputs remain usable)
-          if (!model.name) return;
-          
-          upsertFood(model);
-          refreshStatsAndDatalist();
-          renderFoodsTable();
-          }
-          
-          // Save on blur (click away)
-          elName.addEventListener("blur", saveNow);
-          elNotes.addEventListener("blur", saveNow);
-          
-          // Save on Enter / Tab for Name field
-          elName.addEventListener("keydown", (e) => {
-          if (e.key === "Enter"){
-            e.preventDefault();
-            elName.blur();
-            return;
-          }
-          if (e.key === "Tab"){
-            // tab will cause blur naturally; ensure we also save immediately
-            setTimeout(saveNow, 0);
-          }
-          });
-          
-          // Notes: allow multiline; autosave on typing (debounced) + blur above
-          elNotes.addEventListener("input", () => {
-          clearTimeout(saveTimer);
-          saveTimer = setTimeout(saveNow, 450);
-          });
-          
-          // Checkboxes: after applyExclusive() runs on change, save immediately
-          function saveAfterPreference(){
-          saveNow();
-          }
           chkLike.addEventListener("change", saveAfterPreference);
           chkDislike.addEventListener("change", saveAfterPreference);
           chkTry.addEventListener("change", saveAfterPreference);
@@ -897,8 +1008,29 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
         },
 footer: ({ close }) => {
   const btnClose = mkBtn("Close", "ghost", () => close());
-  return [btnClose];
+
+  const btnSave = mkBtn("Save", "primary", () => {
+    const name = (document.getElementById("foodName").value || "").trim();
+    const notes = (document.getElementById("foodNotes").value || "").trim();
+
+    if (!name){
+      alert("Name is required for a Food Item.");
+      return;
+    }
+
+    model.name = name;
+    model.notes = notes;
+
+    upsertFood(model);
+
+    close();
+    refreshStatsAndDatalist();
+    renderFoodsTable();
+  });
+
+  return [btnClose, btnSave];
 }
+
 
       });
     }
@@ -910,6 +1042,14 @@ footer: ({ close }) => {
     persist();
   }
 }
+    function updateFoodById(id, patch){
+  const idx = state.foods.findIndex(x => x.id === id);
+  if (idx < 0) return;
+
+  state.foods[idx] = { ...state.foods[idx], ...patch };
+  persist();
+}
+
     function upsertFood(item){
       // If same name already exists (case-insensitive), update that record instead of duplicating
       const idx = state.foods.findIndex(x => x.name.trim().toLowerCase() === item.name.trim().toLowerCase());
