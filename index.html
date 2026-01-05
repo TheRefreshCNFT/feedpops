@@ -1487,7 +1487,7 @@ btn.addEventListener("click", () => {
           return box;
         },
         footer: ({ close }) => {
-          const btnClose = mkBtn("Close", "ghost", () => { close(); openRecipeModal(mealKey, model); });
+          const btnClose = mkBtn("Close", "ghost", () => { close();
           const btnEdit = mkBtn("Edit", "primary", () => {
             close();
             openRecipeModal(mealKey, r);
