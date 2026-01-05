@@ -621,7 +621,7 @@
     const btnExport = document.getElementById("btnExport");
     const btnImport = document.getElementById("btnImport");
     const importFile = document.getElementById("importFile");
-
+    let pendingImportPayload = null;
 
     // ---------- Init ----------
     let activeTab = state.ui?.activeTab || "myFoods";
@@ -648,18 +648,18 @@ btnImport.addEventListener("click", () => importFile.click());
 
 importFile.addEventListener("change", async () => {
   const file = importFile.files && importFile.files[0];
-  importFile.value = ""; // allow re-importing same file later
+  importFile.value = "";
   if (!file) return;
 
   try{
     const text = await file.text();
-    const parsed = JSON.parse(text);
-    importStateFromJson(parsed);
-  } catch (e){
+    pendingImportPayload = JSON.parse(text);
+    openImportOptionsModal();
+  } catch {
+    pendingImportPayload = null;
     alert("Import failed. The selected file does not appear to be valid JSON.");
   }
 });
-
 
     // ---------- Rendering ----------
     function renderTabs(){
@@ -1032,8 +1032,7 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
           return box;
         },
 footer: ({ close }) => {
-  const btnClose = mkBtn("Close", "ghost", () => close());
-
+  const btnClose = mkBtn("Close", "ghost", () => { close(); openRecipeModal(mealKey, model); });
   const btnSave = mkBtn("Save", "primary", () => {
     const name = (document.getElementById("foodName").value || "").trim();
     const notes = (document.getElementById("foodNotes").value || "").trim();
@@ -1155,12 +1154,31 @@ footer: ({ close }) => {
         title: "",
         servings: "",
         time: "",
-        ingredients: "",
-        steps: "",
+        ingredientsItems: [],   // <-- new
+        stepsItems: [],         // <-- new (array of strings)
         notes: "",
         createdAt: Date.now(),
         updatedAt: null
       };
+
+      // Backward-compat for older recipes that stored ingredients/steps as strings
+      if (!Array.isArray(model.ingredientsItems)){
+        model.ingredientsItems = [];
+        const legacy = (model.ingredients || "").trim();
+        if (legacy) {
+          legacy.split(/\r?\n/).filter(Boolean).forEach(line => {
+            model.ingredientsItems.push({ name: line.trim(), qty:"", unit:"", notes:"", addToGroceries:false });
+          });
+        }
+      }
+      if (!Array.isArray(model.stepsItems)){
+        const legacyS = (model.steps || "").trim();
+        model.stepsItems = legacyS ? legacyS.split(/\r?\n/).map(s => s.replace(/^•\s*/,"").trim()).filter(Boolean) : [];
+      }
+      delete model.ingredients;
+      delete model.steps;
+
+
 
       openModal({
         title: isEdit ? "Edit Recipe" : "Add Recipe",
@@ -1183,16 +1201,28 @@ footer: ({ close }) => {
               </div>
             </div>
 
-            <div class="field" style="margin-top:12px;">
-              <label>Ingredients</label>
-              <textarea id="rIngredients" placeholder="One item per line. Use suggestions from My Foods while typing.">${escapeHtml(model.ingredients || "")}</textarea>
-              <div class="hint">Tip: Start typing a food name to use autofill suggestions.</div>
+          <div class="subCard" style="padding:12px;margin-top:12px;">
+            <div class="panelTop" style="margin:0 0 10px 0;">
+              <div class="panelTitle">Ingredients (add rows like Groceries). Names autofill from My Foods.</div>
+              <div class="actions">
+                <button class="btn ghost" type="button" id="btnAddRIng">+ Item</button>
+              </div>
             </div>
-
-            <div class="field" style="margin-top:12px;">
-              <label>Steps</label>
-              <textarea id="rSteps" placeholder="How to make it...">${escapeHtml(model.steps || "")}</textarea>
+          
+            <div class="listItems" id="rIngWrap"></div>
+          </div>
+          
+          <div class="subCard" style="padding:12px;margin-top:12px;">
+            <div class="panelTop" style="margin:0 0 10px 0;">
+              <div class="panelTitle">Steps (saved as bullet points).</div>
+              <div class="actions">
+                <button class="btn ghost" type="button" id="btnAddRStep">+ Step</button>
+              </div>
             </div>
+          
+            <div id="rStepsWrap"></div>
+          </div>
+          
 
             <div class="field" style="margin-top:12px;">
               <label>Notes</label>
@@ -1201,7 +1231,187 @@ footer: ({ close }) => {
           `;
 
           // Attach datalist-based suggestion behavior for ingredients
-          attachDatalistToTextareaLines(box.querySelector("#rIngredients"));
+          setTimeout(() => {
+  const btnAdd = box.querySelector("#btnAddRIng");
+  const wrap = box.querySelector("#rIngWrap");
+
+  function blankIng(){
+    return { name:"", qty:"", unit:"", notes:"", addToGroceries:false };
+  }
+
+  function renderIngredients(){
+    wrap.innerHTML = "";
+
+    model.ingredientsItems = Array.isArray(model.ingredientsItems) ? model.ingredientsItems : [];
+    if (!model.ingredientsItems.length) model.ingredientsItems.push(blankIng());
+
+    model.ingredientsItems.forEach((it, idx) => {
+      const row = document.createElement("div");
+      row.className = "listRow";
+      row.innerHTML = `
+        <div class="field">
+          <label>Item</label>
+          <input type="text" data-k="name" data-i="${idx}" list="foodsDatalist" placeholder="e.g., Broccoli" value="${escapeAttr(it.name)}" />
+        </div>
+
+        <div class="field">
+          <label>Qty</label>
+          <input type="number" step="0.01" data-k="qty" data-i="${idx}" placeholder="e.g., 2" value="${escapeAttr(it.qty)}" />
+        </div>
+
+        <div class="field">
+          <label>Unit</label>
+          <select data-k="unit" data-i="${idx}">
+            ${unitOptions(it.unit)}
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Notes</label>
+          <textarea data-k="notes" data-i="${idx}" placeholder="Optional...">${escapeHtml(it.notes||"")}</textarea>
+        </div>
+
+        <div class="field">
+          <label>Add to Grocery List</label>
+          <div class="inline">
+            <label class="chk">
+              <input type="checkbox" data-k="addToGroceries" data-i="${idx}" ${it.addToGroceries ? "checked" : ""} />
+              <span>Yes</span>
+            </label>
+          </div>
+          <div class="hint">If checked, can be pushed into Groceries later.</div>
+        </div>
+      `;
+
+      const actions = document.createElement("div");
+      actions.className = "listRowActions";
+      actions.style.gridColumn = "1 / -1";
+      actions.innerHTML = `
+        <button class="btn ghost" type="button" data-act="dup" data-i="${idx}">Duplicate</button>
+        <button class="btn danger" type="button" data-act="del" data-i="${idx}">Remove</button>
+      `;
+      row.appendChild(actions);
+      wrap.appendChild(row);
+    });
+
+    // bind changes
+    wrap.querySelectorAll("input, textarea, select").forEach(inp => {
+      const k = inp.dataset.k;
+      const i = +inp.dataset.i;
+
+      const apply = () => {
+        if (!model.ingredientsItems[i]) return;
+        if (k === "addToGroceries") model.ingredientsItems[i][k] = !!inp.checked;
+        else model.ingredientsItems[i][k] = inp.value ?? "";
+      };
+
+      inp.addEventListener("input", apply);
+      inp.addEventListener("change", apply);
+    });
+
+    // actions
+    wrap.querySelectorAll("button[data-act]").forEach(b => {
+      b.addEventListener("click", () => {
+        const i = +b.dataset.i;
+        const act = b.dataset.act;
+        if (act === "del"){
+          model.ingredientsItems.splice(i, 1);
+          if (!model.ingredientsItems.length) model.ingredientsItems.push(blankIng());
+          renderIngredients();
+        }
+        if (act === "dup"){
+          model.ingredientsItems.splice(i+1, 0, deepClone(model.ingredientsItems[i]));
+          renderIngredients();
+        }
+      });
+    });
+  }
+
+  btnAdd.addEventListener("click", () => {
+    model.ingredientsItems.push(blankIng());
+    renderIngredients();
+  });
+
+  renderIngredients();
+}, 0);
+
+ setTimeout(() => {
+  const btn = box.querySelector("#btnAddRStep");
+  const wrap = box.querySelector("#rStepsWrap");
+
+  function renderSteps(){
+    wrap.innerHTML = "";
+    const steps = Array.isArray(model.stepsItems) ? model.stepsItems : [];
+    if (!steps.length){
+      wrap.innerHTML = `<div class="empty">No steps yet. Tap <b>+ Step</b> to add bullet points.</div>`;
+      return;
+    }
+
+    const card = document.createElement("div");
+    card.className = "subCard";
+    card.style.padding = "12px";
+    card.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${steps.map((s, i) => `
+          <div style="display:flex;gap:10px;align-items:flex-start;">
+            <div class="chip" style="min-width:44px;text-align:center;">${i+1}</div>
+            <div style="flex:1;white-space:pre-wrap;line-height:1.45;">• ${escapeHtml(s)}</div>
+            <button class="iconBtn danger" type="button" data-delstep="${i}" title="Delete step" aria-label="Delete step">🗑</button>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    wrap.appendChild(card);
+
+    card.querySelectorAll("button[data-delstep]").forEach(b => {
+      b.addEventListener("click", () => {
+        const i = +b.dataset.delstep;
+        model.stepsItems.splice(i, 1);
+        renderSteps();
+      });
+    });
+  }
+
+  btn.addEventListener("click", () => {
+    openModal({
+      title: "Add Step",
+      body: () => {
+        const b = document.createElement("div");
+        b.innerHTML = `
+          <div class="field">
+            <label>Step</label>
+            <textarea id="newStepText" placeholder="Type one or multiple steps. New lines become separate bullets."></textarea>
+          </div>
+        `;
+        return b;
+      },
+      footer: ({ close }) => {
+        const btnClose = mkBtn("Close", "ghost", () => close());
+        const btnSave = mkBtn("Save", "primary", () => {
+          const txt = (document.getElementById("newStepText").value || "").trim();
+          if (txt){
+            const lines = txt.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+            model.stepsItems = Array.isArray(model.stepsItems) ? model.stepsItems : [];
+            model.stepsItems.push(...lines);
+          }
+          close();
+          // Reopen recipe modal with current in-memory model values
+          openRecipeModal(mealKey, model);
+        });
+
+          // Return to the recipe modal view; re-render steps area only
+          renderActivePanel(); // safe refresh if you prefer
+          // Better: just re-render within current recipe modal:
+          // but easiest without touching modal stack: do not close recipe modal
+        });
+        return [btnClose, btnSave];
+      }
+    });
+  });
+
+  renderSteps();
+}, 0);
+     
 
           return box;
         },
@@ -1211,8 +1421,6 @@ footer: ({ close }) => {
             model.title = (document.getElementById("rTitle").value || "").trim();
             model.servings = (document.getElementById("rServings").value || "").trim();
             model.time = (document.getElementById("rTime").value || "").trim();
-            model.ingredients = (document.getElementById("rIngredients").value || "").trim();
-            model.steps = (document.getElementById("rSteps").value || "").trim();
             model.notes = (document.getElementById("rNotes").value || "").trim();
 
             if (isEdit){
@@ -1251,15 +1459,15 @@ footer: ({ close }) => {
               ${viewerField("Servings", r.servings)}
               ${viewerField("Total Time", r.time)}
               <div class="hr"></div>
-              ${viewerBlock("Ingredients", r.ingredients)}
-              ${viewerBlock("Steps", r.steps)}
+              ${viewerBlock("Ingredients", formatIngredientsForViewer(r.ingredientsItems))}
+              ${viewerBlock("Steps", formatStepsForViewer(r.stepsItems))}
               ${viewerBlock("Notes", r.notes)}
             </div>
           `;
           return box;
         },
         footer: ({ close }) => {
-          const btnClose = mkBtn("Close", "ghost", () => close());
+          const btnClose = mkBtn("Close", "ghost", () => { close(); openRecipeModal(mealKey, model); });
           const btnEdit = mkBtn("Edit", "primary", () => {
             close();
             openRecipeModal(mealKey, r);
@@ -1268,6 +1476,15 @@ footer: ({ close }) => {
         }
       });
     }
+
+    model.ingredientsItems = (model.ingredientsItems || []).filter(it => {
+  const hasName = (it.name || "").trim().length > 0;
+  const hasQty = (it.qty || "").toString().trim().length > 0;
+  const hasNotes = (it.notes || "").trim().length > 0;
+  return hasName || hasQty || hasNotes;
+});
+model.stepsItems = (model.stepsItems || []).map(s => (s || "").trim()).filter(Boolean);
+
 
     function addRecipe(mealKey, recipe){
       state.recipes[mealKey] = state.recipes[mealKey] || [];
@@ -1285,9 +1502,13 @@ footer: ({ close }) => {
       const lines = [];
       if (r.time) lines.push(`<div><span class="muted">Time:</span> ${escapeHtml(r.time)}</div>`);
       if (r.servings) lines.push(`<div><span class="muted">Serves:</span> ${escapeHtml(r.servings)}</div>`);
-      if (r.ingredients) lines.push(`<div style="margin-top:6px;"><span class="muted">Ingredients:</span><br>${escapeHtml(snippetLines(r.ingredients, 6)).replaceAll("\n","<br>")}</div>`);
-      if (r.steps) lines.push(`<div style="margin-top:6px;"><span class="muted">Steps:</span><br>${escapeHtml(snippetLines(r.steps, 4)).replaceAll("\n","<br>")}</div>`);
-      if (lines.length === 0) return `<div class="muted">No details yet.</div>`;
+const ingLines = Array.isArray(r.ingredientsItems)
+  ? r.ingredientsItems.filter(x => (x.name||"").trim()).map(x => x.name.trim())
+  : [];
+const stepLines = Array.isArray(r.stepsItems) ? r.stepsItems : [];
+if (ingLines.length) lines.push(`<div style="margin-top:6px;"><span class="muted">Ingredients:</span><br>${escapeHtml(ingLines.slice(0,6).join("\n")).replaceAll("\n","<br>")}${ingLines.length>6 ? `<br><span class="muted">…and more</span>`:""}</div>`);
+if (stepLines.length) lines.push(`<div style="margin-top:6px;"><span class="muted">Steps:</span><br>${escapeHtml(stepLines.slice(0,4).map(s=>"• "+s).join("\n")).replaceAll("\n","<br>")}${stepLines.length>4 ? `<br><span class="muted">…and more</span>`:""}</div>`);
+if (lines.length === 0) return `<div class="muted">No details yet.</div>`;
       return lines.join("");
     }
 
@@ -1518,7 +1739,7 @@ footer: ({ close }) => {
           return box;
         },
         footer: ({ close }) => {
-          const btnClose = mkBtn("Close", "ghost", () => close());
+          const btnClose = mkBtn("Close", "ghost", () => { close(); openRecipeModal(mealKey, model); });
           const btnEdit = mkBtn("Edit", "primary", () => {
             close();
             openGroceryListModal(list);
@@ -1698,6 +1919,27 @@ footer: ({ close }) => {
       });
     }
 
+    function formatIngredientsForViewer(items){
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return "";
+  return list.map(it => {
+    const name = (it.name||"").trim();
+    if (!name) return null;
+    const qty = (it.qty||"").toString().trim();
+    const unit = (it.unit||"").trim();
+    const meta = [qty, unit].filter(Boolean).join(" ");
+    const note = (it.notes||"").trim();
+    const g = it.addToGroceries ? " [Add to Groceries]" : "";
+    return `• ${name}${meta ? ` (${meta})` : ""}${note ? ` — ${note}` : ""}${g}`;
+  }).filter(Boolean).join("\n");
+}
+
+function formatStepsForViewer(steps){
+  const list = Array.isArray(steps) ? steps : [];
+  return list.map(s => `• ${(s||"").trim()}`).filter(s => s !== "•").join("\n");
+}
+
+
     // ---------- Stats + Persistence ----------
     function refreshStatsAndDatalist(){
       statFoods.textContent = "Foods: " + state.foods.length;
@@ -1722,6 +1964,109 @@ footer: ({ close }) => {
       }
     }
 
+function openImportOptionsModal(){
+  if (!pendingImportPayload) return;
+
+  openModal({
+    title: "Import JSON",
+    body: () => {
+      const box = document.createElement("div");
+      box.innerHTML = `
+        <div class="field">
+          <label>Import Options</label>
+          <div class="hint">Select which sections to import. Import Selected will overwrite those sections only.</div>
+        </div>
+
+        <div class="subCard" style="padding:12px;">
+          ${impOpt("impWhole","Whole Profile", true)}
+          <div class="hr"></div>
+          ${impOpt("impFoods","My Foods")}
+          ${impOpt("impBreakfast","Breakfast")}
+          ${impOpt("impLunch","Lunch")}
+          ${impOpt("impDinner","Dinner")}
+          ${impOpt("impSnacks","Snacks")}
+          ${impOpt("impGroceries","Groceries")}
+        </div>
+      `;
+      return box;
+    },
+    footer: ({ close }) => {
+      const btnClose = mkBtn("Close", "ghost", () => {
+        pendingImportPayload = null;
+        close();
+      });
+
+      const btnImport = mkBtn("Import Selected", "primary", () => {
+        const whole = document.getElementById("impWhole")?.checked;
+
+        const opts = {
+          whole,
+          foods: document.getElementById("impFoods")?.checked,
+          breakfast: document.getElementById("impBreakfast")?.checked,
+          lunch: document.getElementById("impLunch")?.checked,
+          dinner: document.getElementById("impDinner")?.checked,
+          snacks: document.getElementById("impSnacks")?.checked,
+          groceries: document.getElementById("impGroceries")?.checked,
+        };
+
+        importSelectedSections(pendingImportPayload, opts);
+
+        pendingImportPayload = null;
+        close();
+
+        refreshStatsAndDatalist();
+        renderTabs();
+        renderActivePanel();
+        alert("Import complete.");
+      });
+
+      return [btnClose, btnImport];
+    }
+  });
+}
+
+function impOpt(id, label, checked=false){
+  return `
+    <div class="inline" style="justify-content:space-between;">
+      <div style="font-weight:800;">${escapeHtml(label)}</div>
+      <label class="chk">
+        <input type="checkbox" id="${id}" ${checked ? "checked" : ""} />
+        <span>Yes</span>
+      </label>
+    </div>
+  `;
+}
+
+function importSelectedSections(payload, opts){
+  // unwrap payload if you used {schema, data}
+  const incomingRaw = (payload && payload.data) ? payload.data : payload;
+  const incoming = normalizeState(incomingRaw);
+
+  if (opts.whole){
+    state.ui = incoming.ui;
+    state.foods = incoming.foods;
+    state.recipes = incoming.recipes;
+    state.groceryLists = incoming.groceryLists;
+    persist();
+    activeTab = state.ui?.activeTab || "myFoods";
+    return;
+  }
+
+  // Selective overwrite only
+  if (opts.foods) state.foods = incoming.foods;
+
+  state.recipes = state.recipes || { breakfast:[], lunch:[], dinner:[], snacks:[] };
+
+  if (opts.breakfast) state.recipes.breakfast = incoming.recipes.breakfast;
+  if (opts.lunch) state.recipes.lunch = incoming.recipes.lunch;
+  if (opts.dinner) state.recipes.dinner = incoming.recipes.dinner;
+  if (opts.snacks) state.recipes.snacks = incoming.recipes.snacks;
+
+  if (opts.groceries) state.groceryLists = incoming.groceryLists;
+
+  persist();
+}
+    
     function exportStateToJson(){
   // Always export normalized data to keep format stable
   const exportObj = {
