@@ -1372,43 +1372,40 @@ footer: ({ close }) => {
     });
   }
 
-  btn.addEventListener("click", () => {
-    openModal({
-      title: "Add Step",
-      body: () => {
-        const b = document.createElement("div");
-        b.innerHTML = `
-          <div class="field">
-            <label>Step</label>
-            <textarea id="newStepText" placeholder="Type one or multiple steps. New lines become separate bullets."></textarea>
-          </div>
-        `;
-        return b;
-      },
-      footer: ({ close }) => {
-        const btnClose = mkBtn("Close", "ghost", () => close());
-        const btnSave = mkBtn("Save", "primary", () => {
-          const txt = (document.getElementById("newStepText").value || "").trim();
-          if (txt){
-            const lines = txt.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-            model.stepsItems = Array.isArray(model.stepsItems) ? model.stepsItems : [];
-            model.stepsItems.push(...lines);
-          }
-          close();
-          // Reopen recipe modal with current in-memory model values
-          openRecipeModal(mealKey, model);
-        });
+btn.addEventListener("click", () => {
+  openModal({
+    title: "Add Step",
+    body: () => {
+      const b = document.createElement("div");
+      b.innerHTML = `
+        <div class="field">
+          <label>Step</label>
+          <textarea id="newStepText" placeholder="Type one or multiple steps. New lines become separate bullets."></textarea>
+        </div>
+      `;
+      return b;
+    },
+    footer: ({ close }) => {
+      const btnClose = mkBtn("Close", "ghost", () => {
+        close();
+        openRecipeModal(mealKey, model);
+      });
 
-          // Return to the recipe modal view; re-render steps area only
-          renderActivePanel(); // safe refresh if you prefer
-          // Better: just re-render within current recipe modal:
-          // but easiest without touching modal stack: do not close recipe modal
-        });
-        return [btnClose, btnSave];
-      }
-    });
+      const btnSave = mkBtn("Save", "primary", () => {
+        const txt = (document.getElementById("newStepText").value || "").trim();
+        if (txt){
+          const lines = txt.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+          model.stepsItems = Array.isArray(model.stepsItems) ? model.stepsItems : [];
+          model.stepsItems.push(...lines);
+        }
+        close();
+        openRecipeModal(mealKey, model);
+      });
+
+      return [btnClose, btnSave];
+    }
   });
-
+});
   renderSteps();
 }, 0);
      
