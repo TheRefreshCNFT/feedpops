@@ -563,6 +563,10 @@
           <span class="chip" id="statRecipes">Recipes: 0</span>
           <span class="chip" id="statLists">Grocery Lists: 0</span>
           <button class="btn danger" id="btnReset" type="button" title="Clears all local data">Reset Local Data</button>
+          <button class="btn ghost" id="btnExport" type="button" title="Download a JSON backup">Export JSON</button>
+          <button class="btn ghost" id="btnImport" type="button" title="Import a JSON backup">Import JSON</button>
+          <input class="srOnly" id="importFile" type="file" accept="application/json,.json" />
+
         </div>
       </div>
     </div>
@@ -614,6 +618,10 @@
     const statRecipes = document.getElementById("statRecipes");
     const statLists = document.getElementById("statLists");
     const btnReset = document.getElementById("btnReset");
+    const btnExport = document.getElementById("btnExport");
+    const btnImport = document.getElementById("btnImport");
+    const importFile = document.getElementById("importFile");
+
 
     // ---------- Init ----------
     let activeTab = state.ui?.activeTab || "myFoods";
@@ -634,6 +642,24 @@
       localStorage.removeItem(STORAGE_KEY);
       location.reload();
     });
+
+    btnExport.addEventListener("click", () => exportStateToJson());
+btnImport.addEventListener("click", () => importFile.click());
+
+importFile.addEventListener("change", async () => {
+  const file = importFile.files && importFile.files[0];
+  importFile.value = ""; // allow re-importing same file later
+  if (!file) return;
+
+  try{
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    importStateFromJson(parsed);
+  } catch (e){
+    alert("Import failed. The selected file does not appear to be valid JSON.");
+  }
+});
+
 
     // ---------- Rendering ----------
     function renderTabs(){
@@ -1695,6 +1721,73 @@ footer: ({ close }) => {
         console.warn("Persist failed:", e);
       }
     }
+
+    function exportStateToJson(){
+  // Always export normalized data to keep format stable
+  const exportObj = {
+    schema: "feedme_backup_v1",
+    exportedAt: new Date().toISOString(),
+    data: normalizeState(deepClone(state))
+  };
+
+  const json = JSON.stringify(exportObj, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `feedme_backup_${new Date().toISOString().replaceAll(":","-")}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+    function importStateFromJson(payload){
+  // Supports either full wrapper {schema, data} or direct state object
+  let incoming = payload;
+
+  if (payload && typeof payload === "object" && payload.data){
+    incoming = payload.data;
+  }
+
+  // Validate shape by normalizing (drops unknown structure safely)
+  const normalized = normalizeState(incoming);
+
+  const totalFoods = normalized.foods.length;
+  const totalRecipes =
+    (normalized.recipes.breakfast?.length || 0) +
+    (normalized.recipes.lunch?.length || 0) +
+    (normalized.recipes.dinner?.length || 0) +
+    (normalized.recipes.snacks?.length || 0);
+  const totalLists = normalized.groceryLists.length;
+
+  const msg =
+    `Import this backup?\n\n` +
+    `Foods: ${totalFoods}\n` +
+    `Recipes: ${totalRecipes}\n` +
+    `Grocery Lists: ${totalLists}\n\n` +
+    `This will REPLACE your current local data on this device/browser.`;
+
+  if (!confirm(msg)) return;
+
+  // Replace in-memory state fields (preserve object reference)
+  state.ui = normalized.ui;
+  state.foods = normalized.foods;
+  state.recipes = normalized.recipes;
+  state.groceryLists = normalized.groceryLists;
+
+  persist();
+
+  // Make UI reflect imported tab/contents immediately
+  activeTab = state.ui?.activeTab || "myFoods";
+  renderTabs();
+  renderActivePanel();
+  refreshStatsAndDatalist();
+
+  alert("Import complete.");
+}
 
     function loadState(){
       const raw = localStorage.getItem(STORAGE_KEY);
