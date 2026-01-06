@@ -1420,30 +1420,7 @@ btn.addEventListener("click", () => {
             model.time = (document.getElementById("rTime").value || "").trim();
             model.notes = (document.getElementById("rNotes").value || "").trim();
 
-            footer: ({ close }) => {
-  const btnClose = mkBtn("Close", "ghost", () => close());
-  const btnSave = mkBtn("Save", "primary", () => {
-    model.title = (document.getElementById("rTitle").value || "").trim();
-    model.servings = (document.getElementById("rServings").value || "").trim();
-    model.time = (document.getElementById("rTime").value || "").trim();
-    model.notes = (document.getElementById("rNotes").value || "").trim();
-
-    if (isEdit){
-      model.updatedAt = Date.now();
-      updateRecipe(mealKey, model);
-    } else {
-      addRecipe(mealKey, model);
-    }
-
-    close();
-    refreshStatsAndDatalist();
-    renderActivePanel();
-  });
-
-  return [btnClose, btnSave];
-}
-
-            if (isEdit){
+          if (isEdit){
               model.updatedAt = Date.now();
               updateRecipe(mealKey, model);
             } else {
@@ -1752,17 +1729,11 @@ if (lines.length === 0) return `<div class="muted">No details yet.</div>`;
           `;
           return box;
         },
-        footer: ({ close }) => {
-            const btnClose = mkBtn("Close", "ghost", () => {
-    close();
-    openRecipeModal(mealKey, r);
-  });
-          const btnEdit = mkBtn("Edit", "primary", () => {
-            close();
-            openGroceryListModal(list);
-          });
-          return [btnClose, btnEdit];
-        }
+footer: ({ close }) => {
+  const btnClose = mkBtn("Close", "ghost", () => { close(); openRecipeModal(mealKey, r); });
+  const btnEdit  = mkBtn("Edit",  "primary", () => { close(); openRecipeModal(mealKey, r); });
+  return [btnClose, btnEdit];
+}
       });
     }
 
