@@ -559,6 +559,13 @@ input.gNameTry{ color: var(--tryText) !important; font-weight: 850; }
   touch-action: manipulation;
   letter-spacing: .02em;
 }
+    .glPickBox{
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--accent2);
+}
+
     /* Multi-add session: replace GL with a checkbox */
 .glPickLabel{
   display:inline-flex;
@@ -753,6 +760,26 @@ input.gNameTry{ color: var(--tryText) !important; font-weight: 850; }
     const STORAGE_KEY = "feedme_v1";
 
     const state = loadState();
+    // ---- Multi-GL pick mode (used when "Multiple" is selected) ----
+const glPick = {
+  active: false,      // set true when user chooses a target list in Multiple flow
+  listId: null,       // the chosen grocery list id
+  selected: new Set() // food ids selected
+};
+
+function glPickIsActive(){
+  return !!(glPick.active && glPick.listId);
+}
+
+function toggleFoodPick(foodId){
+  if (!glPickIsActive()) return;
+  if (glPick.selected.has(foodId)) glPick.selected.delete(foodId);
+  else glPick.selected.add(foodId);
+
+  // update any pinned UI you already have
+  if (typeof updateGLPickBar === "function") updateGLPickBar();
+}
+
 
     const elTabs = document.getElementById("tabs");
     const elPanel = document.getElementById("panel");
@@ -990,16 +1017,12 @@ head.innerHTML = `
 <td>
   <div style="display:flex;gap:8px;align-items:center;">
     <input class="cellInput" type="text" value="${escapeAttr(it.name)}" data-id="${it.id}" data-k="name" />
-    ${glPick.active
-  ? `<label class="glPickLabel" title="Select for Grocery List">
-       <input type="checkbox" data-act="glPick" data-id="${it.id}" ${glPick.selected.has(it.id) ? "checked" : ""} />
-     </label>`
-  : `<button class="glMiniBtn" type="button" data-act="gl" title="Grocery List" aria-label="Grocery List">GL</button>`
-}
+    ${glPickIsActive()
+      ? `<input type="checkbox" class="glPickBox" data-act="glpick" data-id="${it.id}" ${glPick.selected.has(it.id) ? "checked" : ""} />`
+      : `<button class="glMiniBtn" type="button" data-act="gl" title="Grocery List" aria-label="Grocery List">GL</button>`
+    }
   </div>
 </td>
-
-
     <td>
       <div class="cellChk">
         <input type="checkbox" data-id="${it.id}" data-k="like" />
@@ -1041,7 +1064,10 @@ return;
   <td>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <b>${escapeHtml(it.name)}</b>
-    <button class="glMiniBtn" type="button" data-act="gl" title="Grocery List" aria-label="Grocery List">GL</button>
+    ${glPickIsActive()
+  ? `<input type="checkbox" class="glPickBox" data-act="glpick" data-id="${it.id}" ${glPick.selected.has(it.id) ? "checked" : ""} />`
+  : `<button class="glMiniBtn" type="button" data-act="gl" title="Grocery List" aria-label="Grocery List">GL</button>`
+}
   </div>
 </td>
 
@@ -1095,6 +1121,17 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
             startGLFlowFromMyFoods(it);
           });
         }
+
+        const cb = tr.querySelector('[data-act="glpick"]');
+if (cb){
+  cb.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+  cb.addEventListener("change", () => {
+    toggleFoodPick(it.id);
+  });
+}
+
 
         tbody.appendChild(tr);
       });
@@ -1198,16 +1235,20 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
       const glBtn = tr.querySelector('[data-act="gl"]');
 if (glBtn){
   // prevent the button from stealing focus and causing blur-driven rerenders
-  glBtn.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, { passive:false });
-
   glBtn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // use the current typed values (even if not yet saved)
+    // NEW: if multi-pick is active, toggle selection instead of starting flow
+    if (glPickIsActive()){
+      toggleFoodPick(id);
+      // keep the checkbox in sync if present
+      const cb = tr.querySelector('[data-act="glpick"]');
+      if (cb) cb.checked = glPick.selected.has(id);
+      return;
+    }
+
+    // existing behavior (single flow)
     const cur = state.foods.find(x => x.id === id);
     if (!cur) return;
 
