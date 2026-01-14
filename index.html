@@ -536,9 +536,12 @@
       overflow:hidden; clip:rect(0,0,0,0);
       white-space:nowrap; border:0;
     }
-    /* Grocery pref coloring (derived from My Foods) */
-.gNameLike{ color: var(--ok); font-weight: 850; }
-.gNameTry{ color: var(--tryText); font-weight: 850; }
+
+/* Grocery pref coloring (derived from My Foods) */
+/* overrides base input color */
+input.gNameLike{ color: var(--ok) !important; font-weight: 850; }
+input.gNameTry{ color: var(--tryText) !important; font-weight: 850; }
+
 
 /* Small inline "check notes" star */
 .noteStarBtn{
@@ -551,8 +554,9 @@
   border-radius: 999px;
   border: 1px solid rgba(255,255,255,0.18);
   background: rgba(255,255,255,0.05);
-  color: rgba(234,240,255,0.95);
+  color: var(--tryText);
   font-weight: 900;
+  text-shadow: 0 0 10px rgba(255,180,74,0.25);
   cursor: pointer;
   user-select:none;
   touch-action: manipulation;
@@ -1560,9 +1564,9 @@ if (lines.length === 0) return `<div class="muted">No details yet.</div>`;
 
     // ---------- Groceries ----------
     function foodByNameCI(name){
-  const n = (name || "").trim().toLowerCase();
+  const n = (name || "").trim().replace(/\s+/g," ").toLowerCase();
   if (!n) return null;
-  return state.foods.find(f => (f.name || "").trim().toLowerCase() === n) || null;
+  return state.foods.find(f => (f.name || "").trim().replace(/\s+/g," ").toLowerCase() === n) || null;
 }
 
 function prefClassForFoodName(name){
@@ -1910,6 +1914,27 @@ model.items[i][k] = val;
             let val = (inp.value ?? "");
 if (k === "unit" && val === "Each") val = "count"; // safety if any old UI ever produced this
 model.items[i][k] = val;
+
+                        if (k === "name"){
+              const rowEl = inp.closest(".listRow");
+              if (rowEl){
+                inp.classList.remove("gNameLike", "gNameTry");
+                const cls = prefClassForFoodName(inp.value);
+                if (cls) inp.classList.add(cls);
+
+                const starBtn = rowEl.querySelector('button[data-act="note"]');
+                const showStar = hasFoodNote(inp.value);
+                if (starBtn) starBtn.style.display = showStar ? "inline-flex" : "none";
+
+                const note = foodNoteText(inp.value);
+                const notesTa = rowEl.querySelector('textarea[data-k="notes"]');
+                const curNotes = (model.items[i].notes || "").trim();
+                if (note && !curNotes){
+                  model.items[i].notes = note;
+                  if (notesTa) notesTa.value = note;
+                }
+              }
+            }
           });
 
           // blur commit for qty too (mobile often doesn't fire change)
