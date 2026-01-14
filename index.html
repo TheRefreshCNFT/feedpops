@@ -6,17 +6,17 @@
   <title>Feed Me v1</title>
   <style>
     :root{
-      --bg0:#070A12;
-      --bg1:#0A1222;
-      --card: rgba(255,255,255,0.06);
-      --card2: rgba(255,255,255,0.08);
-      --stroke: rgba(255,255,255,0.12);
-      --stroke2: rgba(255,255,255,0.18);
-      --text:#EAF0FF;
-      --muted:#AAB6D6;
-      --accent:#7CF2D6;
-      --accent2:#8AA7FF;
-      --warn:#FF6B7A;
+      --bg0:#0A0D16;                 /* slightly softer */
+      --bg1:#0F1930;                 /* slightly softer */
+      --card: rgba(255,255,255,0.075);
+      --card2: rgba(255,255,255,0.095);
+      --stroke: rgba(255,255,255,0.11);
+      --stroke2: rgba(255,255,255,0.16);
+      --text:#E7EEFF;
+      --muted:#B4C0DD;
+      --accent:#6DE8CF;              /* slightly less neon */
+      --accent2:#7D9CFF;
+      --warn:#FF7180;
       --ok:#74F59D;
       --tryText:#FFB44A;
       --shadow: 0 18px 55px rgba(0,0,0,0.45);
@@ -38,9 +38,9 @@
       font-family:var(--sans);
       -webkit-font-smoothing: antialiased;
       background:
-        radial-gradient(1200px 900px at 15% 10%, rgba(138,167,255,0.18), transparent 55%),
-        radial-gradient(1000px 800px at 85% 15%, rgba(124,242,214,0.16), transparent 55%),
-        radial-gradient(900px 700px at 35% 95%, rgba(255,107,122,0.10), transparent 60%),
+radial-gradient(1200px 900px at 15% 10%, rgba(138,167,255,0.14), transparent 55%),
+radial-gradient(1000px 800px at 85% 15%, rgba(109,232,207,0.12), transparent 55%),
+radial-gradient(900px 700px at 35% 95%, rgba(255,113,128,0.08), transparent 60%),
         linear-gradient(180deg, var(--bg0), var(--bg1));
       overflow-x:hidden;
     }
@@ -559,6 +559,54 @@ input.gNameTry{ color: var(--tryText) !important; font-weight: 850; }
   touch-action: manipulation;
   letter-spacing: .02em;
 }
+    /* Multi-add session: replace GL with a checkbox */
+.glPickLabel{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-left: 8px;
+  width: 34px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.04);
+  cursor: pointer;
+  user-select:none;
+  touch-action: manipulation;
+}
+.glPickLabel input{
+  width: 18px;
+  height: 18px;
+}
+
+/* Pinned floating bar */
+.glPickBar{
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  width: min(var(--maxw), calc(100% - 22px));
+  z-index: 9998;
+  display:none;
+}
+.glPickBar.show{ display:block; }
+
+.glPickBarInner{
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(12,16,28,0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 18px 55px rgba(0,0,0,0.48);
+  padding: 12px;
+  display:flex;
+  gap: 12px;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+}
+.glPickMeta{ display:flex; flex-direction:column; gap:2px; }
+
 .glMiniBtn:active{ transform: scale(0.98); }
 
 /* Grocery viewer "done" line */
@@ -656,6 +704,22 @@ input.gNameTry{ color: var(--tryText) !important; font-weight: 850; }
     </div>
   </div>
 
+    <!-- Pinned bar for Grocery List multi-select -->
+  <div id="glPickBar" class="glPickBar" aria-hidden="true">
+    <div class="glPickBarInner">
+      <div class="glPickMeta">
+        <div style="font-weight:900;">Multi-add</div>
+        <div class="subtitle" style="margin:0;font-size:12px;">
+          Selected: <span id="glPickCount" style="font-family:var(--mono);font-weight:900;">0</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+        <button class="btn primary" id="glPickAddBtn" type="button">Add Selected</button>
+        <button class="btn ghost" id="glPickCancelBtn" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Host -->
   <div class="modalOverlay" id="modalOverlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
@@ -706,6 +770,21 @@ input.gNameTry{ color: var(--tryText) !important; font-weight: 850; }
     const btnImport = document.getElementById("btnImport");
     const importFile = document.getElementById("importFile");
     let pendingImportPayload = null;
+        // Grocery List multi-select session (My Foods)
+    const glPickBar = document.getElementById("glPickBar");
+    const glPickCount = document.getElementById("glPickCount");
+    const glPickAddBtn = document.getElementById("glPickAddBtn");
+    const glPickCancelBtn = document.getElementById("glPickCancelBtn");
+
+    const glPick = {
+      active: false,
+      listId: null,
+      selected: new Set()
+    };
+
+    glPickAddBtn.addEventListener("click", () => commitGLPickSelection());
+    glPickCancelBtn.addEventListener("click", () => endGLPickSession(true));
+
 
     // ---------- Init ----------
     let activeTab = state.ui?.activeTab || "myFoods";
@@ -760,6 +839,7 @@ importFile.addEventListener("change", async () => {
         b.textContent = t.label;
         b.setAttribute("aria-selected", String(t.key === activeTab));
         b.addEventListener("click", () => {
+          if (glPick.active) endGLPickSession(false);
           activeTab = t.key;
           state.ui = state.ui || {};
           state.ui.activeTab = activeTab;
@@ -910,7 +990,12 @@ head.innerHTML = `
 <td>
   <div style="display:flex;gap:8px;align-items:center;">
     <input class="cellInput" type="text" value="${escapeAttr(it.name)}" data-id="${it.id}" data-k="name" />
-    <button class="glMiniBtn" type="button" data-act="gl" title="Grocery List" aria-label="Grocery List">GL</button>
+    ${glPick.active
+  ? `<label class="glPickLabel" title="Select for Grocery List">
+       <input type="checkbox" data-act="glPick" data-id="${it.id}" ${glPick.selected.has(it.id) ? "checked" : ""} />
+     </label>`
+  : `<button class="glMiniBtn" type="button" data-act="gl" title="Grocery List" aria-label="Grocery List">GL</button>`
+}
   </div>
 </td>
 
@@ -988,6 +1073,21 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
   refreshStatsAndDatalist();
   renderFoodsTable();
 });
+                const pick = tr.querySelector('input[data-act="glPick"]');
+        if (pick){
+          pick.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!glPick.active) return;
+
+            const on = !!pick.checked;
+            if (on) glPick.selected.add(it.id);
+            else glPick.selected.delete(it.id);
+
+            updateGLPickBar();
+          });
+        }
+
         const gl = tr.querySelector('[data-act="gl"]');
         if (gl){
           gl.addEventListener("click", (e) => {
@@ -1074,6 +1174,27 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
   // Initial state
   applyExclusive();
 
+        const pickChk = tr.querySelector('input[data-act="glPick"]');
+  if (pickChk){
+    pickChk.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }, { passive:false });
+
+    pickChk.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!glPick.active) return;
+
+      const on = !!pickChk.checked;
+      if (on) glPick.selected.add(id);
+      else glPick.selected.delete(id);
+
+      updateGLPickBar();
+    });
+
+    // If checkbox exists, we are in pick mode; don't wire GL button.
+  }
       const glBtn = tr.querySelector('[data-act="gl"]');
 if (glBtn){
   // prevent the button from stealing focus and causing blur-driven rerenders
@@ -1782,6 +1903,106 @@ function addItemsToGroceryList(listId, foods){
   persist();
 }
 
+    function escCss(s){
+  try { return (window.CSS && CSS.escape) ? CSS.escape(String(s)) : String(s).replace(/["\\]/g, "\\$&"); }
+  catch { return String(s).replace(/["\\]/g, "\\$&"); }
+}
+
+function updateGLPickBar(){
+  if (!glPickBar) return;
+
+  if (!glPick.active){
+    glPickBar.classList.remove("show");
+    glPickBar.setAttribute("aria-hidden", "true");
+    return;
+  }
+
+  glPickBar.classList.add("show");
+  glPickBar.setAttribute("aria-hidden", "false");
+
+  const n = glPick.selected.size;
+  if (glPickCount) glPickCount.textContent = String(n);
+  if (glPickAddBtn) glPickAddBtn.disabled = (n === 0);
+}
+
+function beginGLPickSession(listId, preselectId){
+  glPick.active = true;
+  glPick.listId = listId;
+  glPick.selected = new Set();
+
+  if (preselectId) glPick.selected.add(preselectId);
+
+  updateGLPickBar();
+  renderFoodsTable(); // swap GL buttons to checkboxes
+}
+
+function endGLPickSession(rerender){
+  glPick.active = false;
+  glPick.listId = null;
+  glPick.selected = new Set();
+  updateGLPickBar();
+  if (rerender) renderFoodsTable(); // bring GL buttons back
+}
+
+// If user is editing an inline "blank" row, capture current typed values at add-time.
+function foodSnapshotForGL(id){
+  const stored = state.foods.find(f => f.id === id);
+  if (!stored) return null;
+
+  const nmEl = document.querySelector(`input[data-id="${escCss(id)}"][data-k="name"]`);
+  if (!nmEl) return stored;
+
+  const notesEl = document.querySelector(`textarea[data-id="${escCss(id)}"][data-k="notes"]`);
+  const likeEl = document.querySelector(`input[data-id="${escCss(id)}"][data-k="like"]`);
+  const dislikeEl = document.querySelector(`input[data-id="${escCss(id)}"][data-k="dislike"]`);
+  const tryEl = document.querySelector(`input[data-id="${escCss(id)}"][data-k="try"]`);
+
+  const pref =
+    likeEl?.checked ? "like" :
+    dislikeEl?.checked ? "dislike" :
+    tryEl?.checked ? "try" : (stored.pref || "none");
+
+  return {
+    ...stored,
+    name: (nmEl.value || "").trim() || stored.name,
+    notes: (notesEl?.value || "").trim(),
+    pref
+  };
+}
+
+function commitGLPickSelection(){
+  if (!glPick.active || !glPick.listId) return;
+
+  const list = state.groceryLists.find(x => x.id === glPick.listId);
+  if (!list){
+    alert("Target grocery list not found.");
+    endGLPickSession(true);
+    return;
+  }
+
+  const before = (list.items?.length || 0);
+
+  const foods = Array.from(glPick.selected)
+    .map(id => foodSnapshotForGL(id))
+    .filter(f => f && (f.name || "").trim());
+
+  if (!foods.length){
+    alert("No valid items selected.");
+    return;
+  }
+
+  addItemsToGroceryList(glPick.listId, foods);
+
+  const after = (list.items?.length || 0);
+  const added = Math.max(0, after - before);
+
+  endGLPickSession(true);
+  refreshStatsAndDatalist();
+
+  alert(`Added ${added} item${added === 1 ? "" : "s"} to the grocery list.`);
+}
+
+
 function startGLFlowFromMyFoods(clickedFood){
   // Step 1: Single or Multiple
   openModal({
@@ -1791,7 +2012,7 @@ function startGLFlowFromMyFoods(clickedFood){
       box.innerHTML = `
         <div class="field">
           <label>Single or Multiple Items?</label>
-          <div class="hint">Single adds the item you clicked. Multiple adds all foods currently visible (filter + search).</div>
+         <div class="hint">Single adds the item you clicked. Multiple lets you pick a list first, then select items manually.</div>
         </div>
       `;
       return box;
@@ -1805,9 +2026,9 @@ function startGLFlowFromMyFoods(clickedFood){
 
       const btnMulti = mkBtn("Multiple", "ghost", () => {
         close();
-        const foods = getVisibleFoods();
-        chooseNewOrAddGL(foods);
+        chooseGLDestinationThenSelect(clickedFood);
       });
+
 
       const btnCancel = mkBtn("Cancel", "ghost", () => close());
 
@@ -1815,6 +2036,97 @@ function startGLFlowFromMyFoods(clickedFood){
     }
   });
 }
+
+ function chooseGLDestinationThenSelect(clickedFood){
+  openModal({
+    title: "Multiple Items",
+    body: () => {
+      const box = document.createElement("div");
+      box.innerHTML = `
+        <div class="field">
+          <label>Where do you want to add items?</label>
+          <div class="hint">Choose the target grocery list first. Then the GL buttons turn into checkboxes so you can select exactly what you want.</div>
+        </div>
+      `;
+      return box;
+    },
+    footer: ({ close }) => {
+      const btnNew = mkBtn("New GL", "primary", () => {
+        close();
+
+        const list = {
+          id: cryptoId(),
+          createdAt: Date.now(),
+          updatedAt: null,
+          items: []
+        };
+        state.groceryLists.push(list);
+        persist();
+
+        // start selection mode (preselect the clicked food)
+        beginGLPickSession(list.id, clickedFood?.id);
+      });
+
+      const btnAdd = mkBtn("Add to GL", "ghost", () => {
+        close();
+        openPickGroceryListModalForPick(clickedFood?.id);
+      });
+
+      const btnCancel = mkBtn("Cancel", "ghost", () => close());
+
+      return [btnCancel, btnNew, btnAdd];
+    }
+  });
+}
+
+function openPickGroceryListModalForPick(preselectId){
+  const lists = state.groceryLists
+    .slice()
+    .sort((a,b) => (b.updatedAt||b.createdAt) - (a.updatedAt||a.createdAt));
+
+  if (!lists.length){
+    alert("No grocery lists exist yet. Choose New GL instead.");
+    return;
+  }
+
+  openModal({
+    title: "Pick Grocery List",
+    body: () => {
+      const box = document.createElement("div");
+      const wrap = document.createElement("div");
+      wrap.className = "subCard";
+      wrap.style.padding = "12px";
+      wrap.style.display = "flex";
+      wrap.style.flexDirection = "column";
+      wrap.style.gap = "10px";
+
+      lists.forEach(l => {
+        const dt = new Date(l.updatedAt || l.createdAt);
+        const count = l.items?.length || 0;
+
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn ghost";
+        b.style.justifyContent = "space-between";
+        b.innerHTML = `<span style="font-weight:800;">Grocery List</span><span class="chip">${fmtDateTime(dt)} • ${count} items</span>`;
+        b.addEventListener("click", () => {
+          closeModal(); // close picker
+          beginGLPickSession(l.id, preselectId);
+        });
+
+        wrap.appendChild(b);
+      });
+
+      box.appendChild(wrap);
+      return box;
+    },
+    footer: ({ close }) => {
+      const btnClose = mkBtn("Close", "ghost", () => close());
+      return [btnClose];
+    }
+  });
+}
+   
 
 function chooseNewOrAddGL(foods){
   const usable = (foods || []).filter(f => (f.name || "").trim());
