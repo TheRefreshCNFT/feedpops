@@ -988,6 +988,14 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
   refreshStatsAndDatalist();
   renderFoodsTable();
 });
+        const gl = tr.querySelector('[data-act="gl"]');
+        if (gl){
+          gl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            startGLFlowFromMyFoods(it);
+          });
+        }
+
         tbody.appendChild(tr);
       });
     }
@@ -1067,13 +1075,32 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
   applyExclusive();
 
       const glBtn = tr.querySelector('[data-act="gl"]');
-    if (glBtn){
-      glBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const it = state.foods.find(x => x.id === id);
-        if (it) startGLFlowFromMyFoods(it);
-      });
-    }
+if (glBtn){
+  // prevent the button from stealing focus and causing blur-driven rerenders
+  glBtn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, { passive:false });
+
+  glBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // use the current typed values (even if not yet saved)
+    const cur = state.foods.find(x => x.id === id);
+    if (!cur) return;
+
+    const clicked = {
+      ...cur,
+      name: (nameEl.value || "").trim() || cur.name,
+      notes: (notesEl.value || "").trim(),
+      pref: applyExclusive()
+    };
+
+    startGLFlowFromMyFoods(clicked);
+  });
+}
+
 
 
   // Keep your existing action buttons behavior
@@ -1082,12 +1109,6 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
     const it = state.foods.find(x => x.id === id);
     if (it) openFoodItemModal(it);
   });
-
-      tr.querySelector('[data-act="gl"]').addEventListener("click", (e) => {
-  e.stopPropagation();
-  startGLFlowFromMyFoods(it);
-});
-
 
   tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
     e.stopPropagation();
@@ -2389,6 +2410,60 @@ function openGroceryViewerModal(id){
       return [btnClose, btnEdit, btnDelete];
     }
   });
+  setTimeout(() => {
+  const wrap = document.getElementById("glViewerWrap");
+  if (!wrap) return;
+
+  const target = state.groceryLists.find(x => x.id === id);
+  if (!target){
+    wrap.innerHTML = `<div class="muted">List not found.</div>`;
+    return;
+  }
+
+  const items = Array.isArray(target.items) ? target.items : [];
+  if (!items.length){
+    wrap.innerHTML = `<div class="muted">No items.</div>`;
+    return;
+  }
+
+  wrap.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${items.map((it, idx) => {
+        const name = escapeHtml(it.name || "");
+        const qty = escapeHtml((it.qty ?? "").toString().trim());
+        const unit = escapeHtml((it.unit || "").trim());
+        const qtyUnit = [qty, unit].filter(Boolean).join(" ") || "—";
+        const doneCls = it.done ? "glDone" : "";
+        return `
+          <div class="subCard" data-i="${idx}" style="padding:12px;cursor:pointer;touch-action:manipulation;">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+              <div class="${doneCls}" data-name style="font-weight:900;">
+                ${idx + 1}. ${name || "<span class='muted'>(Unnamed)</span>"}
+              </div>
+              <div class="chip">${qtyUnit}</div>
+            </div>
+          </div>
+        `;
+      }).join("")}
+      <div class="hint">Tap an item to toggle done (strike-through).</div>
+    </div>
+  `;
+
+  wrap.querySelectorAll('[data-i]').forEach(card => {
+    card.addEventListener("click", () => {
+      const i = +card.dataset.i;
+      const cur = state.groceryLists.find(x => x.id === id);
+      if (!cur || !Array.isArray(cur.items) || !cur.items[i]) return;
+
+      cur.items[i].done = !cur.items[i].done;
+      persist();
+
+      const nameEl = card.querySelector('[data-name]');
+      if (nameEl) nameEl.classList.toggle("glDone", !!cur.items[i].done);
+    });
+  });
+}, 0);
+
 }
 
     function addGroceryList(list){
@@ -2669,70 +2744,6 @@ function openImportOptionsModal(){
           ${impOpt("impGroceries","Groceries")}
         </div>
       `;
-
-      setTimeout(() => {
-  const wrap = box.querySelector("#glViewerWrap");
-  if (!wrap) return;
-
-  const items = Array.isArray(list.items) ? list.items : [];
-  if (!items.length){
-    wrap.innerHTML = `<div class="muted">No items.</div>`;
-    return;
-  }
-
-  // stacked clickable items
-  wrap.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      ${items.map((it, idx) => {
-        const name = escapeHtml(it.name || "");
-        const qty = escapeHtml((it.qty ?? "").toString().trim());
-        const unit = escapeHtml((it.unit || "").trim());
-        const qtyUnit = [qty, unit].filter(Boolean).join(" ") || "—";
-        const doneCls = it.done ? "glDone" : "";
-        return `
-          <div class="subCard" data-i="${idx}" style="padding:12px;cursor:pointer;touch-action:manipulation;">
-            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
-              <div style="font-weight:900;" class="${doneCls}">
-                ${idx + 1}. ${name || "<span class='muted'>(Unnamed)</span>"}
-              </div>
-              <div class="chip">${qtyUnit}</div>
-            </div>
-            <div style="margin-top:8px;">
-              ${(it.notes || "").trim()
-                ? `<div style="color:rgba(234,240,255,0.9);"><span class="muted">Notes:</span> ${escapeHtml(it.notes)}</div>`
-                : `<div class="muted">No notes.</div>`}
-            </div>
-            <div style="margin-top:8px;">
-              ${(it.description || "").trim()
-                ? `<div style="color:rgba(234,240,255,0.9);"><span class="muted">Description:</span> ${escapeHtml(it.description)}</div>`
-                : `<div class="muted">No description.</div>`}
-            </div>
-          </div>
-        `;
-      }).join("")}
-      <div class="hint">Tap an item to toggle done (strike-through).</div>
-    </div>
-  `;
-
-  // Toggle done on click
-  wrap.querySelectorAll('[data-i]').forEach(card => {
-    card.addEventListener("click", () => {
-      const i = +card.dataset.i;
-      const target = state.groceryLists.find(x => x.id === list.id);
-      if (!target || !Array.isArray(target.items) || !target.items[i]) return;
-
-      target.items[i].done = !target.items[i].done;
-      persist();
-
-      // update UI without rebuilding everything
-      const titleEl = card.querySelector('div[style*="font-weight:900"]');
-      if (titleEl){
-        titleEl.classList.toggle("glDone", !!target.items[i].done);
-      }
-    });
-  });
-}, 0);
-
       return box;
     },
     footer: ({ close }) => {
