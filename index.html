@@ -1196,10 +1196,30 @@ footer: ({ close }) => {
               <h4 class="miniTitle">${escapeHtml(r.title || "(Untitled Recipe)")}</h4>
               <div class="miniMeta">${fmtDateTime(dt)}</div>
             </div>
+          
             <div class="miniBody">
               ${recipePreviewHtml(r)}
             </div>
+          
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+              <button class="iconBtn" type="button" data-act="edit" title="Edit" aria-label="Edit">✎</button>
+              <button class="iconBtn danger" type="button" data-act="del" title="Delete" aria-label="Delete">🗑</button>
+            </div>
           `;
+          c.querySelector('[data-act="edit"]').addEventListener("click", (e) => {
+          e.stopPropagation();
+          openRecipeModal(mealKey, r);
+        });
+        
+        c.querySelector('[data-act="del"]').addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (!confirm(`Delete "${r.title || "Untitled Recipe"}"?`)) return;
+          deleteRecipe(mealKey, r.id);
+          refreshStatsAndDatalist();
+          renderActivePanel();
+        });
+
+
           cards.appendChild(c);
         });
 
@@ -1522,17 +1542,24 @@ btn.addEventListener("click", () => {
           `;
           return box;
         },
-        footer: ({ close }) => {
-            const btnClose = mkBtn("Close", "ghost", () => {
-    close();
-    openRecipeModal(mealKey, r);
-  });
-          const btnEdit = mkBtn("Edit", "primary", () => {
-            close();
-            openRecipeModal(mealKey, r);
-          });
-          return [btnClose, btnEdit];
-        }
+      footer: ({ close }) => {
+        const btnClose = mkBtn("Close", "ghost", () => close());
+      
+        const btnEdit = mkBtn("Edit", "primary", () => {
+          close();
+          openRecipeModal(mealKey, r);
+        });
+      
+        const btnDelete = mkBtn("Delete", "danger", () => {
+          if (!confirm(`Delete "${r.title || "Untitled Recipe"}"?`)) return;
+          deleteRecipe(mealKey, r.id);
+          close();
+          refreshStatsAndDatalist();
+          renderActivePanel();
+        });
+      
+        return [btnClose, btnEdit, btnDelete];
+      }
       });
     }
 
@@ -1547,6 +1574,15 @@ btn.addEventListener("click", () => {
       if (idx >= 0) list[idx] = recipe;
       persist();
     }
+    function deleteRecipe(mealKey, id){
+  const list = state.recipes[mealKey] || [];
+  const idx = list.findIndex(x => x.id === id);
+  if (idx >= 0){
+    list.splice(idx, 1);
+    persist();
+  }
+}
+
 
     function recipePreviewHtml(r){
       const lines = [];
