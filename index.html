@@ -2098,19 +2098,20 @@ function renderGroceryItemsReadonly(list){
 function blankGroceryItem(){
   return { name:"", qty:"", unit:"", notes:"", description:"" };
 }
+    
+function unitOptions(selected){
+  // Accept legacy "Each" if you already saved some that way, but normalize to "count"
+  const norm = (selected === "Each") ? "count" : (selected || "");
 
-    function unitOptions(selected){
-  // Back-compat: old saved "count" becomes "Each"
-  const sel = (selected === "count") ? "Each" : (selected || "");
+  // Put "count" first, but label it as "Each". Keep other values unchanged.
+  const units = ["", "count", "lbs", "oz", "cups", "bottles", "containers", "packages", "bags", "boxes"];
 
-  // "Each" at top, keep the rest the same, remove "count"
-  const units = ["", "Each", "lbs", "oz", "cups", "bottles", "containers", "packages", "bags", "boxes"];
-
-  return units.map(u => {
-    const label = u || "—";
-    return `<option value="${escapeAttr(u)}" ${u===sel ? "selected" : ""}>${label}</option>`;
+  return units.map(v => {
+    const label = !v ? "—" : (v === "count" ? "Each" : v);
+    return `<option value="${escapeAttr(v)}" ${v === norm ? "selected" : ""}>${label}</option>`;
   }).join("");
 }
+
 
     // ---------- Modal Helpers ----------
     function openModal({ title, body, footer }){
