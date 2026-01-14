@@ -541,6 +541,31 @@
 /* overrides base input color */
 input.gNameLike{ color: var(--ok) !important; font-weight: 850; }
 input.gNameTry{ color: var(--tryText) !important; font-weight: 850; }
+/* My Foods: "GL" button */
+.glMiniBtn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-left: 8px;
+  padding: 0 10px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.05);
+  color: rgba(234,240,255,0.95);
+  font-weight: 900;
+  cursor:pointer;
+  user-select:none;
+  touch-action: manipulation;
+  letter-spacing: .02em;
+}
+.glMiniBtn:active{ transform: scale(0.98); }
+
+/* Grocery viewer "done" line */
+.glDone{
+  text-decoration: line-through;
+  opacity: 0.65;
+}
 
 
 /* Small inline "check notes" star */
@@ -684,6 +709,10 @@ input.gNameTry{ color: var(--tryText) !important; font-weight: 850; }
 
     // ---------- Init ----------
     let activeTab = state.ui?.activeTab || "myFoods";
+    // My Foods UI prefs
+    state.ui = state.ui || {};
+    if (typeof state.ui.foodSearch !== "string") state.ui.foodSearch = "";
+    if (!state.ui.foodFilter) state.ui.foodFilter = "like_try"; // default LIKE/WILLING
 
     renderTabs();
     renderActivePanel();
@@ -762,13 +791,25 @@ importFile.addEventListener("change", async () => {
 
       const head = document.createElement("div");
       head.className = "subHead";
-      head.innerHTML = `
-        <h3>Foods</h3>
-        <div class="row">
-          <span class="chip" title="Alphabetized by Name">Sorted A→Z</span>
-          <button class="btn primary" type="button" id="btnAddFood">+ Food Item</button>
-        </div>
-      `;
+head.innerHTML = `
+  <h3>Foods</h3>
+  <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+    <span class="chip" title="Alphabetized by Name">Sorted A→Z</span>
+
+    <select id="foodFilter" style="min-height:44px;border-radius:14px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);padding:10px 12px;font-size:14px;">
+      <option value="like_try">LIKE/WILLING</option>
+      <option value="all">All</option>
+      <option value="like">LIKE</option>
+      <option value="try">WILLING</option>
+      <option value="dislike">NOT LIKE</option>
+    </select>
+
+    <input id="foodSearch" type="text" placeholder="Search foods..." style="min-height:44px;border-radius:14px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:var(--text);padding:10px 12px;font-size:14px;min-width:220px;" />
+
+    <button class="btn primary" type="button" id="btnAddFood">+ Food Item</button>
+  </div>
+`;
+
       foodsCard.appendChild(head);
 
       const wrap = document.createElement("div");
@@ -801,21 +842,56 @@ importFile.addEventListener("change", async () => {
       elPanel.appendChild(foodsCard);
 
       document.getElementById("btnAddFood").addEventListener("click", () => openFoodItemModal());
+      const elSearch = document.getElementById("foodSearch");
+    const elFilter = document.getElementById("foodFilter");
+    
+    // hydrate UI
+    elSearch.value = state.ui.foodSearch || "";
+    elFilter.value = state.ui.foodFilter || "like_try";
+    
+    elSearch.addEventListener("input", () => {
+      state.ui.foodSearch = elSearch.value || "";
+      persist();
+      renderFoodsTable();
+      scrollFoodsToMatch(state.ui.foodSearch);
+    });
+    
+    elFilter.addEventListener("change", () => {
+      state.ui.foodFilter = elFilter.value || "like_try";
+      persist();
+      renderFoodsTable();
+      scrollFoodsToMatch(state.ui.foodSearch);
+    });
+
 
       renderFoodsTable();
     }
+
+    function scrollFoodsToMatch(query){
+  const q = (query || "").trim().toLowerCase();
+  if (!q) return;
+
+  const tbody = document.getElementById("foodsTbody");
+  if (!tbody) return;
+
+  // first row whose name starts with typed text
+  const rows = Array.from(tbody.querySelectorAll("tr[data-foodname]"));
+  const hit = rows.find(r => (r.dataset.foodname || "").startsWith(q));
+  if (hit) hit.scrollIntoView({ block: "center" });
+}
+
 
     function renderFoodsTable(){
       const tbody = document.getElementById("foodsTbody");
       if (!tbody) return;
 
-      const items = getFoodsSorted();
+      const items = getVisibleFoods();
       tbody.innerHTML = "";
 
       if (items.length === 0){
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td colspan="6">
+          <td colspan="7">
             <div class="empty">No foods added yet. Tap <b>+ Food Item</b> to begin.</div>
           </td>
         `;
@@ -831,9 +907,13 @@ importFile.addEventListener("change", async () => {
   tr.innerHTML = `
     <td><span class="chip">${idx + 1}</span></td>
 
-    <td>
-      <input class="cellInput" type="text" value="${escapeAttr(it.name)}" data-id="${it.id}" data-k="name" />
-    </td>
+<td>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <input class="cellInput" type="text" value="${escapeAttr(it.name)}" data-id="${it.id}" data-k="name" />
+    <button class="glMiniBtn" type="button" data-act="gl" title="Grocery List" aria-label="Grocery List">GL</button>
+  </div>
+</td>
+
 
     <td>
       <div class="cellChk">
@@ -873,7 +953,13 @@ return;
 
           tr.innerHTML = `
   <td><span class="chip">${idx + 1}</span></td>
-  <td><b>${escapeHtml(it.name)}</b></td>
+  <td>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <b>${escapeHtml(it.name)}</b>
+    <button class="glMiniBtn" type="button" data-act="gl" title="Grocery List" aria-label="Grocery List">GL</button>
+  </div>
+</td>
+
   <td>${it.pref === "like" ? `<span class="badgeYes">YES</span>` : `<span class="badgeNo">NO</span>`}</td>
   <td>${it.pref === "dislike" ? `<span class="badgeYes">YES</span>` : `<span class="badgeNo">NO</span>`}</td>
   <td>${it.pref === "try" ? `<span class="badgeYes">YES</span>` : `<span class="badgeNo">NO</span>`}</td>
@@ -980,12 +1066,28 @@ tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
   // Initial state
   applyExclusive();
 
+      const glBtn = tr.querySelector('[data-act="gl"]');
+    if (glBtn){
+      glBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const it = state.foods.find(x => x.id === id);
+        if (it) startGLFlowFromMyFoods(it);
+      });
+    }
+
+
   // Keep your existing action buttons behavior
   tr.querySelector('[data-act="edit"]').addEventListener("click", (e) => {
     e.stopPropagation();
     const it = state.foods.find(x => x.id === id);
     if (it) openFoodItemModal(it);
   });
+
+      tr.querySelector('[data-act="gl"]').addEventListener("click", (e) => {
+  e.stopPropagation();
+  startGLFlowFromMyFoods(it);
+});
+
 
   tr.querySelector('[data-act="del"]').addEventListener("click", (e) => {
     e.stopPropagation();
@@ -1154,6 +1256,33 @@ footer: ({ close }) => {
     function getFoodsSorted(){
       return [...state.foods].sort((a,b) => a.name.localeCompare(b.name, undefined, { sensitivity:"base" }));
     }
+
+    function getVisibleFoods(){
+  const q = (state.ui.foodSearch || "").trim().toLowerCase();
+  const f = state.ui.foodFilter || "like_try";
+
+  let items = getFoodsSorted();
+
+  // Filter by preference
+  items = items.filter(it => {
+    const pref = it.pref || "none";
+    if (f === "all") return true;
+    if (f === "like") return pref === "like";
+    if (f === "try") return pref === "try";
+    if (f === "dislike") return pref === "dislike";
+    if (f === "like_try") return pref === "like" || pref === "try";
+    return true;
+  });
+
+  // Search by name (contains)
+  if (q){
+    items = items.filter(it => ((it.name || "").toLowerCase()).includes(q));
+  }
+
+  return items;
+}
+
+    
 
     // ---------- Recipes Tabs ----------
     function renderRecipesTab(mealKey){
@@ -1598,6 +1727,185 @@ if (lines.length === 0) return `<div class="muted">No details yet.</div>`;
       return lines.join("");
     }
 
+
+    function foodToGroceryItem(food){
+  const nm = (food?.name || "").trim();
+  if (!nm) return null;
+  return {
+    name: nm,
+    qty: "",
+    unit: "",
+    notes: (food?.notes || "").trim(),
+    description: "",
+    done: false
+  };
+}
+
+function addItemsToGroceryList(listId, foods){
+  const list = state.groceryLists.find(x => x.id === listId);
+  if (!list) return;
+
+  list.items = Array.isArray(list.items) ? list.items : [];
+  const seen = new Set(list.items.map(it => (it.name || "").trim().toLowerCase()).filter(Boolean));
+
+  (foods || []).forEach(f => {
+    const gi = foodToGroceryItem(f);
+    if (!gi) return;
+    const key = gi.name.toLowerCase();
+    if (seen.has(key)) return; // dedupe
+    seen.add(key);
+    list.items.push(gi);
+  });
+
+  list.updatedAt = Date.now();
+  persist();
+}
+
+function startGLFlowFromMyFoods(clickedFood){
+  // Step 1: Single or Multiple
+  openModal({
+    title: "Grocery List",
+    body: () => {
+      const box = document.createElement("div");
+      box.innerHTML = `
+        <div class="field">
+          <label>Single or Multiple Items?</label>
+          <div class="hint">Single adds the item you clicked. Multiple adds all foods currently visible (filter + search).</div>
+        </div>
+      `;
+      return box;
+    },
+    footer: ({ close }) => {
+      const btnSingle = mkBtn("Single", "primary", () => {
+        close();
+        const foods = [clickedFood];
+        chooseNewOrAddGL(foods);
+      });
+
+      const btnMulti = mkBtn("Multiple", "ghost", () => {
+        close();
+        const foods = getVisibleFoods();
+        chooseNewOrAddGL(foods);
+      });
+
+      const btnCancel = mkBtn("Cancel", "ghost", () => close());
+
+      return [btnCancel, btnSingle, btnMulti];
+    }
+  });
+}
+
+function chooseNewOrAddGL(foods){
+  const usable = (foods || []).filter(f => (f.name || "").trim());
+  if (!usable.length){
+    alert("No items available to add.");
+    return;
+  }
+
+  openModal({
+    title: "Grocery List",
+    body: () => {
+      const box = document.createElement("div");
+      box.innerHTML = `
+        <div class="field">
+          <label>New GL or Add to GL?</label>
+          <div class="hint">New GL creates a new grocery list with these items. Add to GL lets you pick an existing list.</div>
+        </div>
+      `;
+      return box;
+    },
+    footer: ({ close }) => {
+      const btnNew = mkBtn("New GL", "primary", () => {
+        close();
+        const list = {
+          id: cryptoId(),
+          createdAt: Date.now(),
+          updatedAt: null,
+          items: []
+        };
+
+        // add now, then persist
+        state.groceryLists.push(list);
+        persist();
+
+        addItemsToGroceryList(list.id, usable);
+
+        // jump to Groceries and open viewer
+        activeTab = "groceries";
+        state.ui.activeTab = activeTab;
+        persist();
+        renderTabs();
+        renderActivePanel();
+        openGroceryViewerModal(list.id);
+      });
+
+      const btnAdd = mkBtn("Add to GL", "ghost", () => {
+        close();
+        openPickGroceryListModal(usable);
+      });
+
+      const btnCancel = mkBtn("Cancel", "ghost", () => close());
+      return [btnCancel, btnNew, btnAdd];
+    }
+  });
+}
+
+function openPickGroceryListModal(foods){
+  const lists = state.groceryLists
+    .slice()
+    .sort((a,b) => (b.updatedAt||b.createdAt) - (a.updatedAt||a.createdAt));
+
+  if (!lists.length){
+    alert("No grocery lists exist yet. Choose New GL instead.");
+    return;
+  }
+
+  openModal({
+    title: "Add to Grocery List",
+    body: () => {
+      const box = document.createElement("div");
+      const wrap = document.createElement("div");
+      wrap.className = "subCard";
+      wrap.style.padding = "12px";
+      wrap.style.display = "flex";
+      wrap.style.flexDirection = "column";
+      wrap.style.gap = "10px";
+
+      lists.forEach(l => {
+        const dt = new Date(l.updatedAt || l.createdAt);
+        const count = l.items?.length || 0;
+
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn ghost";
+        b.style.justifyContent = "space-between";
+        b.innerHTML = `<span style="font-weight:800;">Grocery List</span><span class="chip">${fmtDateTime(dt)} • ${count} items</span>`;
+        b.addEventListener("click", () => {
+          addItemsToGroceryList(l.id, foods);
+          closeModal(); // close picker
+          refreshStatsAndDatalist();
+          activeTab = "groceries";
+          state.ui.activeTab = activeTab;
+          persist();
+          renderTabs();
+          renderActivePanel();
+          openGroceryViewerModal(l.id);
+        });
+
+        wrap.appendChild(b);
+      });
+
+      box.appendChild(wrap);
+      return box;
+    },
+    footer: ({ close }) => {
+      const btnClose = mkBtn("Close", "ghost", () => close());
+      return [btnClose];
+    }
+  });
+}
+
+    
     // ---------- Groceries ----------
     function foodByNameCI(name){
   const n = (name || "").trim().replace(/\s+/g," ").toLowerCase();
@@ -1639,14 +1947,15 @@ function buildDefaultGroceryItemsFromPrefs(){
     if (seen.has(key)) return;
     seen.add(key);
 
-    out.push({
-      name: nm,
-      qty: "",
-      unit: "",
-      // include My Foods notes into the grocery Notes field
-      notes: (f.notes || "").trim(),
-      description: ""
-    });
+out.push({
+  name: nm,
+  qty: "",
+  unit: "",
+  // include My Foods notes into the grocery Notes field
+  notes: (f.notes || "").trim(),
+  description: "",
+  done: false
+});
   });
 
   return out;
@@ -2057,9 +2366,7 @@ function openGroceryViewerModal(id){
           <div class="chip">${fmtDateTime(dt)}</div>
           <div class="chip">Items: ${list.items?.length || 0}</div>
         </div>
-        <div class="subCard" style="padding:12px;">
-          ${renderGroceryItemsReadonly(list)}
-        </div>
+<div class="subCard" style="padding:12px;" id="glViewerWrap"></div>
       `;
       return box;
     },
@@ -2164,8 +2471,9 @@ function renderGroceryItemsReadonly(list){
 }
 
 function blankGroceryItem(){
-  return { name:"", qty:"", unit:"", notes:"", description:"" };
+  return { name:"", qty:"", unit:"", notes:"", description:"", done:false };
 }
+
     
 function unitOptions(selected){
   // Accept legacy "Each" if you already saved some that way, but normalize to "count"
@@ -2361,6 +2669,70 @@ function openImportOptionsModal(){
           ${impOpt("impGroceries","Groceries")}
         </div>
       `;
+
+      setTimeout(() => {
+  const wrap = box.querySelector("#glViewerWrap");
+  if (!wrap) return;
+
+  const items = Array.isArray(list.items) ? list.items : [];
+  if (!items.length){
+    wrap.innerHTML = `<div class="muted">No items.</div>`;
+    return;
+  }
+
+  // stacked clickable items
+  wrap.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${items.map((it, idx) => {
+        const name = escapeHtml(it.name || "");
+        const qty = escapeHtml((it.qty ?? "").toString().trim());
+        const unit = escapeHtml((it.unit || "").trim());
+        const qtyUnit = [qty, unit].filter(Boolean).join(" ") || "—";
+        const doneCls = it.done ? "glDone" : "";
+        return `
+          <div class="subCard" data-i="${idx}" style="padding:12px;cursor:pointer;touch-action:manipulation;">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+              <div style="font-weight:900;" class="${doneCls}">
+                ${idx + 1}. ${name || "<span class='muted'>(Unnamed)</span>"}
+              </div>
+              <div class="chip">${qtyUnit}</div>
+            </div>
+            <div style="margin-top:8px;">
+              ${(it.notes || "").trim()
+                ? `<div style="color:rgba(234,240,255,0.9);"><span class="muted">Notes:</span> ${escapeHtml(it.notes)}</div>`
+                : `<div class="muted">No notes.</div>`}
+            </div>
+            <div style="margin-top:8px;">
+              ${(it.description || "").trim()
+                ? `<div style="color:rgba(234,240,255,0.9);"><span class="muted">Description:</span> ${escapeHtml(it.description)}</div>`
+                : `<div class="muted">No description.</div>`}
+            </div>
+          </div>
+        `;
+      }).join("")}
+      <div class="hint">Tap an item to toggle done (strike-through).</div>
+    </div>
+  `;
+
+  // Toggle done on click
+  wrap.querySelectorAll('[data-i]').forEach(card => {
+    card.addEventListener("click", () => {
+      const i = +card.dataset.i;
+      const target = state.groceryLists.find(x => x.id === list.id);
+      if (!target || !Array.isArray(target.items) || !target.items[i]) return;
+
+      target.items[i].done = !target.items[i].done;
+      persist();
+
+      // update UI without rebuilding everything
+      const titleEl = card.querySelector('div[style*="font-weight:900"]');
+      if (titleEl){
+        titleEl.classList.toggle("glDone", !!target.items[i].done);
+      }
+    });
+  });
+}, 0);
+
       return box;
     },
     footer: ({ close }) => {
@@ -2520,7 +2892,11 @@ function importSelectedSections(payload, opts){
 
     function normalizeState(s){
       return {
-        ui: s.ui || { activeTab: "myFoods" },
+        ui: {
+              activeTab: s.ui?.activeTab || "myFoods",
+              foodSearch: (typeof s.ui?.foodSearch === "string") ? s.ui.foodSearch : "",
+              foodFilter: s.ui?.foodFilter || "like_try",
+            },
         foods: Array.isArray(s.foods) ? s.foods : [],
         recipes: {
           breakfast: Array.isArray(s.recipes?.breakfast) ? s.recipes.breakfast : [],
