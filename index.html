@@ -18,6 +18,7 @@
       --accent2:#8AA7FF;
       --warn:#FF6B7A;
       --ok:#74F59D;
+      --tryText:#FFB44A;
       --shadow: 0 18px 55px rgba(0,0,0,0.45);
       --radius: 18px;
       --radius2: 14px;
@@ -535,6 +536,60 @@
       overflow:hidden; clip:rect(0,0,0,0);
       white-space:nowrap; border:0;
     }
+    /* Grocery pref coloring (derived from My Foods) */
+.gNameLike{ color: var(--ok); font-weight: 850; }
+.gNameTry{ color: var(--tryText); font-weight: 850; }
+
+/* Small inline "check notes" star */
+.noteStarBtn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-left: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.05);
+  color: rgba(234,240,255,0.95);
+  font-weight: 900;
+  cursor: pointer;
+  user-select:none;
+  touch-action: manipulation;
+}
+.noteStarBtn:active{ transform: scale(0.98); }
+
+/* Grocery list editor layout:
+   Mobile: ITEM/QTY/UNIT on top; NOTES + DESCRIPTION side-by-side; buttons underneath */
+@media (max-width: 899px){
+  .listRow{
+    grid-template-columns: 1fr 1fr 0.85fr 0.95fr;
+    grid-template-areas:
+      "item item qty unit"
+      "notes notes desc desc"
+      "actions actions actions actions";
+    align-items:start;
+  }
+  .listRow .field[data-area="item"]{ grid-area: item; }
+  .listRow .field[data-area="qty"]{ grid-area: qty; }
+  .listRow .field[data-area="unit"]{ grid-area: unit; }
+  .listRow .field[data-area="notes"]{ grid-area: notes; }
+  .listRow .field[data-area="desc"]{ grid-area: desc; }
+
+  .listRowActions{
+    grid-area: actions !important;
+    margin-top: 6px;
+    justify-content:flex-end;
+  }
+}
+
+/* Desktop: 5 columns now that Description exists */
+@media (min-width: 900px){
+  .listRow{
+    grid-template-columns: 1.2fr 0.55fr 0.75fr 1fr 1fr;
+  }
+}
+
   </style>
 </head>
 
@@ -1504,238 +1559,462 @@ if (lines.length === 0) return `<div class="muted">No details yet.</div>`;
     }
 
     // ---------- Groceries ----------
-    function renderGroceries(){
-      elPanel.innerHTML = "";
+    function foodByNameCI(name){
+  const n = (name || "").trim().toLowerCase();
+  if (!n) return null;
+  return state.foods.find(f => (f.name || "").trim().toLowerCase() === n) || null;
+}
 
-      const top = panelTopRow(
-        "Create grocery lists. Tap a list card to view or edit.",
-        [
-          { label:"+ New List", cls:"primary", onClick: () => openGroceryListModal() }
-        ]
-      );
+function prefClassForFoodName(name){
+  const f = foodByNameCI(name);
+  if (!f) return "";
+  if (f.pref === "like") return "gNameLike";
+  if (f.pref === "try") return "gNameTry";
+  return "";
+}
 
-      elPanel.appendChild(top);
+function hasFoodNote(name){
+  const f = foodByNameCI(name);
+  return !!((f?.notes || "").trim());
+}
 
-      const lists = state.groceryLists
-        .slice()
-        .sort((a,b) => (b.updatedAt||b.createdAt) - (a.updatedAt||a.createdAt));
+function foodNoteText(name){
+  const f = foodByNameCI(name);
+  return (f?.notes || "").trim();
+}
 
-      if (lists.length === 0){
-        const empty = document.createElement("div");
-        empty.className = "empty";
-        empty.innerHTML = `No grocery lists yet. Tap <b>+ New List</b> to create one.`;
-        elPanel.appendChild(empty);
-        return;
-      }
+// Build default grocery list items from ALL foods marked Like=YES or Willing To Try=YES
+function buildDefaultGroceryItemsFromPrefs(){
+  const seen = new Set();
+  const out = [];
 
-      const cards = document.createElement("div");
-      cards.className = "cards";
+  // Use sorted foods so the default list is stable/pleasant
+  const foods = getFoodsSorted();
+  foods.forEach(f => {
+    if (f.pref !== "like" && f.pref !== "try") return;
 
-      lists.forEach(list => {
-        const c = document.createElement("div");
-        c.className = "miniCard";
-        c.addEventListener("click", () => openGroceryViewerModal(list.id));
+    const nm = (f.name || "").trim();
+    if (!nm) return;
+    const key = nm.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
 
-        const dt = new Date(list.updatedAt || list.createdAt);
-        const count = list.items?.length || 0;
+    out.push({
+      name: nm,
+      qty: "",
+      unit: "",
+      // include My Foods notes into the grocery Notes field
+      notes: (f.notes || "").trim(),
+      description: ""
+    });
+  });
 
-        c.innerHTML = `
-          <div class="miniTop">
-            <h4 class="miniTitle">Grocery List</h4>
-            <div class="miniMeta">${fmtDateTime(dt)}</div>
-          </div>
-          <div class="miniBody">
-            <div><span class="muted">Items:</span> ${count}</div>
-            <div style="margin-top:6px;">
-              ${groceryPreviewHtml(list)}
+  return out;
+}
+
+// ---- Qty: allow only quarter steps (x.00, x.25, x.50, x.75) ----
+function sanitizeQtyInput(raw){
+  // allow digits + one dot
+  let s = String(raw ?? "");
+  s = s.replace(/[^\d.]/g, "");
+  const firstDot = s.indexOf(".");
+  if (firstDot !== -1){
+    s = s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, "");
+  }
+  return s;
+}
+
+function snapToQuarterString(raw){
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  const v = Number(s);
+  if (!Number.isFinite(v)) return "";
+
+  const snapped = Math.round(v * 4) / 4;
+
+  // Format: 1, 1.25, 1.5, 1.75, etc.
+  let out = snapped.toFixed(2);
+  out = out.replace(/\.00$/,"").replace(/0$/,"");
+  return out;
+}
+
+// Name display for preview/readonly with color + asterisk
+function groceryNameHtml(name){
+  const safe = escapeHtml(name || "");
+  const cls = prefClassForFoodName(name);
+  const star = hasFoodNote(name)
+    ? ` <span class="muted" title="Check notes">*</span>`
+    : "";
+  return `<span class="${cls}">${safe || "<span class='muted'>(Unnamed)</span>"}</span>${star}`;
+}
+
+function renderGroceries(){
+  elPanel.innerHTML = "";
+
+  const top = panelTopRow(
+    "Create grocery lists. Tap a list card to view or edit.",
+    [
+      { label:"+ New List", cls:"primary", onClick: () => openGroceryListModal() }
+    ]
+  );
+
+  elPanel.appendChild(top);
+
+  const lists = state.groceryLists
+    .slice()
+    .sort((a,b) => (b.updatedAt||b.createdAt) - (a.updatedAt||a.createdAt));
+
+  if (lists.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerHTML = `No grocery lists yet. Tap <b>+ New List</b> to create one.`;
+    elPanel.appendChild(empty);
+    return;
+  }
+
+  const cards = document.createElement("div");
+  cards.className = "cards";
+
+  lists.forEach(list => {
+    const c = document.createElement("div");
+    c.className = "miniCard";
+    c.addEventListener("click", () => openGroceryViewerModal(list.id));
+
+    const dt = new Date(list.updatedAt || list.createdAt);
+    const count = list.items?.length || 0;
+
+    c.innerHTML = `
+      <div class="miniTop">
+        <h4 class="miniTitle">Grocery List</h4>
+        <div class="miniMeta">${fmtDateTime(dt)}</div>
+      </div>
+
+      <div class="miniBody">
+        <div><span class="muted">Items:</span> ${count}</div>
+        <div style="margin-top:6px;">
+          ${groceryPreviewHtml(list)}
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+        <button class="iconBtn" type="button" data-act="edit" title="Edit" aria-label="Edit">✎</button>
+        <button class="iconBtn danger" type="button" data-act="del" title="Delete" aria-label="Delete">🗑</button>
+      </div>
+    `;
+
+    c.querySelector('[data-act="edit"]').addEventListener("click", (e) => {
+      e.stopPropagation();
+      openGroceryListModal(list);
+    });
+
+    c.querySelector('[data-act="del"]').addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!confirm("Delete this grocery list?")) return;
+      deleteGroceryListById(list.id);
+      refreshStatsAndDatalist();
+      renderActivePanel();
+    });
+
+    cards.appendChild(c);
+  });
+
+  elPanel.appendChild(cards);
+}
+
+function openGroceryListModal(existing){
+  const isEdit = !!existing;
+  const model = existing ? deepClone(existing) : {
+    id: cryptoId(),
+    createdAt: Date.now(),
+    updatedAt: null,
+    items: []
+  };
+
+  // Auto-populate NEW lists with all Like=YES + Willing To Try=YES from My Foods
+  if (!isEdit){
+    model.items = buildDefaultGroceryItemsFromPrefs();
+  }
+
+  openModal({
+    title: isEdit ? "Edit Grocery List" : "New Grocery List",
+    body: () => {
+      const box = document.createElement("div");
+
+      const topRow = document.createElement("div");
+      topRow.className = "panelTop";
+      topRow.innerHTML = `
+        <div class="panelTitle">
+          New lists auto-fill from My Foods (Like + Willing To Try). Item names are colored (Like=green, Try=orange).
+          If a My Foods note exists, a <b>*</b> appears and notes are copied into the Notes field.
+        </div>
+        <div class="actions">
+          <button class="btn ghost" type="button" id="btnAddGItem">+ New Item</button>
+        </div>
+      `;
+
+      const itemsWrap = document.createElement("div");
+      itemsWrap.className = "listItems";
+      itemsWrap.id = "gItemsWrap";
+
+      box.appendChild(topRow);
+      box.appendChild(itemsWrap);
+
+      setTimeout(() => {
+        const btn = box.querySelector("#btnAddGItem");
+        btn.addEventListener("click", () => {
+          model.items.push(blankGroceryItem());
+          renderGroceryItemEditor();
+        });
+
+        // If somehow empty, keep at least 1 row
+        if (!model.items.length) model.items.push(blankGroceryItem());
+
+        renderGroceryItemEditor();
+      }, 0);
+
+      function renderGroceryItemEditor(){
+        const wrap = box.querySelector("#gItemsWrap");
+        wrap.innerHTML = "";
+
+        model.items.forEach((it, idx) => {
+          const row = document.createElement("div");
+          row.className = "listRow";
+
+          row.innerHTML = `
+            <div class="field" data-area="item">
+              <label>
+                Item
+                <button class="noteStarBtn" type="button" data-act="note" data-i="${idx}" style="display:none" title="Check notes" aria-label="Check notes">*</button>
+              </label>
+              <input type="text" data-k="name" data-i="${idx}" list="foodsDatalist" placeholder="e.g., Milk" value="${escapeAttr(it.name)}" />
             </div>
-          </div>
-        `;
-        cards.appendChild(c);
-      });
 
-      elPanel.appendChild(cards);
-    }
+            <div class="field" data-area="qty">
+              <label>Qty</label>
+              <input
+                type="text"
+                inputmode="decimal"
+                data-k="qty"
+                data-i="${idx}"
+                placeholder="e.g., 1.25"
+                value="${escapeAttr(it.qty)}"
+              />
+              <div class="hint">Quarter steps only (1, 1.25, 1.5, 1.75, ...)</div>
+            </div>
 
-    function openGroceryListModal(existing){
-      const isEdit = !!existing;
-      const model = existing ? deepClone(existing) : {
-        id: cryptoId(),
-        createdAt: Date.now(),
-        updatedAt: null,
-        items: []
-      };
+            <div class="field" data-area="unit">
+              <label>Unit</label>
+              <select data-k="unit" data-i="${idx}">
+                ${unitOptions(it.unit)}
+              </select>
+            </div>
 
-      openModal({
-        title: isEdit ? "Edit Grocery List" : "New Grocery List",
-        body: () => {
-          const box = document.createElement("div");
+            <div class="field" data-area="notes">
+              <label>Notes</label>
+              <textarea data-k="notes" data-i="${idx}" placeholder="Optional...">${escapeHtml(it.notes||"")}</textarea>
+            </div>
 
-          const topRow = document.createElement("div");
-          topRow.className = "panelTop";
-          topRow.innerHTML = `
-            <div class="panelTitle">Add items (name, quantity, unit, notes). Autofill from My Foods while typing item names.</div>
-            <div class="actions">
-              <button class="btn ghost" type="button" id="btnAddGItem">+ New Item</button>
+            <div class="field" data-area="desc">
+              <label>Description</label>
+              <textarea data-k="description" data-i="${idx}" placeholder="Optional...">${escapeHtml(it.description||"")}</textarea>
             </div>
           `;
 
-          const itemsWrap = document.createElement("div");
-          itemsWrap.className = "listItems";
-          itemsWrap.id = "gItemsWrap";
+          const actions = document.createElement("div");
+          actions.className = "listRowActions";
+          actions.style.gridColumn = "1 / -1";
+          actions.innerHTML = `
+            <button class="btn ghost" type="button" data-act="dup" data-i="${idx}">Duplicate</button>
+            <button class="btn danger" type="button" data-act="del" data-i="${idx}">Remove</button>
+          `;
+          row.appendChild(actions);
 
-          box.appendChild(topRow);
-          box.appendChild(itemsWrap);
+          wrap.appendChild(row);
+        });
 
-          document.addEventListener("click", docAddItemClickOnce, { once: true });
-          function docAddItemClickOnce(){
-            // no-op: avoids accidental “double open” if modal opens via click
-          }
+        // Apply pref coloring + asterisk state per row
+        wrap.querySelectorAll('.listRow').forEach((rowEl) => {
+          const nameInp = rowEl.querySelector('input[data-k="name"]');
+          const idx = +nameInp.dataset.i;
 
-          setTimeout(() => {
-            const btn = box.querySelector("#btnAddGItem");
-            btn.addEventListener("click", () => {
-              model.items.push(blankGroceryItem());
-              renderGroceryItemEditor(model);
-            });
-            // start with 1 row if empty (reasonable)
-            if (!model.items.length) model.items.push(blankGroceryItem());
-            renderGroceryItemEditor(model);
-          }, 0);
+          const cls = prefClassForFoodName(nameInp.value);
+          nameInp.classList.remove("gNameLike", "gNameTry");
+          if (cls) nameInp.classList.add(cls);
 
-          function renderGroceryItemEditor(m){
-            const wrap = box.querySelector("#gItemsWrap");
-            wrap.innerHTML = "";
+          const starBtn = rowEl.querySelector('button[data-act="note"]');
+          const showStar = hasFoodNote(nameInp.value);
+          starBtn.style.display = showStar ? "inline-flex" : "none";
 
-            m.items.forEach((it, idx) => {
-              const row = document.createElement("div");
-              row.className = "listRow";
-              row.innerHTML = `
-                <div class="field">
-                  <label>Item</label>
-                  <input type="text" data-k="name" data-i="${idx}" list="foodsDatalist" placeholder="e.g., Milk" value="${escapeAttr(it.name)}" />
-                </div>
+          // pressed -> small guidance (non-destructive)
+          starBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            alert("Check notes (already copied into the Notes field).");
+          };
+        });
 
-                <div class="field">
-                  <label>Qty</label>
-                  <input type="number" step="0.01" data-k="qty" data-i="${idx}" placeholder="e.g., 2" value="${escapeAttr(it.qty)}" />
-                </div>
+        // wire input/change events
+        wrap.querySelectorAll("input, textarea, select").forEach(inp => {
+          const k = inp.dataset.k;
+          const i = +inp.dataset.i;
 
-                <div class="field">
-                  <label>Unit</label>
-                  <select data-k="unit" data-i="${idx}">
-                    ${unitOptions(it.unit)}
-                  </select>
-                </div>
+          inp.addEventListener("input", () => {
+            if (!model.items[i]) return;
 
-                <div class="field">
-                  <label>Notes</label>
-                  <textarea data-k="notes" data-i="${idx}" placeholder="Optional...">${escapeHtml(it.notes||"")}</textarea>
-                </div>
-              `;
-
-              const actions = document.createElement("div");
-              actions.className = "listRowActions";
-              actions.style.gridColumn = "1 / -1";
-              actions.innerHTML = `
-                <button class="btn ghost" type="button" data-act="dup" data-i="${idx}">Duplicate</button>
-                <button class="btn danger" type="button" data-act="del" data-i="${idx}">Remove</button>
-              `;
-              row.appendChild(actions);
-
-              wrap.appendChild(row);
-            });
-
-            // wire change events
-            wrap.querySelectorAll("input, textarea, select").forEach(inp => {
-              inp.addEventListener("input", () => {
-                const i = +inp.dataset.i;
-                const k = inp.dataset.k;
-                if (k === "notes") model.items[i][k] = inp.value;
-                else model.items[i][k] = (inp.value || "");
-              });
-              inp.addEventListener("change", () => {
-                const i = +inp.dataset.i;
-                const k = inp.dataset.k;
-                model.items[i][k] = (inp.value || "");
-              });
-            });
-
-            wrap.querySelectorAll("button[data-act]").forEach(b => {
-              b.addEventListener("click", () => {
-                const i = +b.dataset.i;
-                const act = b.dataset.act;
-                if (act === "del"){
-                  model.items.splice(i, 1);
-                  if (!model.items.length) model.items.push(blankGroceryItem());
-                  renderGroceryItemEditor(model);
-                }
-                if (act === "dup"){
-                  model.items.splice(i+1, 0, deepClone(model.items[i]));
-                  renderGroceryItemEditor(model);
-                }
-              });
-            });
-          }
-
-          return box;
-        },
-        footer: ({ close }) => {
-          const btnBack = mkBtn("Go Back", "ghost", () => close());
-          const btnSave = mkBtn("Save", "primary", () => {
-            // filter out completely blank rows
-            model.items = (model.items || []).filter(it => {
-              const hasName = (it.name || "").trim().length > 0;
-              const hasQty = (it.qty || "").toString().trim().length > 0;
-              const hasNotes = (it.notes || "").trim().length > 0;
-              return hasName || hasQty || hasNotes;
-            });
-
-            if (isEdit){
-              model.updatedAt = Date.now();
-              updateGroceryList(model);
-            } else {
-              addGroceryList(model);
+            if (k === "qty"){
+              // sanitize live typing (digits + one dot)
+              const clean = sanitizeQtyInput(inp.value);
+              if (inp.value !== clean) inp.value = clean;
+              model.items[i].qty = inp.value;
+              return;
             }
 
-            close();
-            refreshStatsAndDatalist();
-            renderActivePanel();
+            model.items[i][k] = (inp.value ?? "");
+
+            // If item name changes, update color + star, and auto-fill notes only if notes empty
+            if (k === "name"){
+              const rowEl = inp.closest(".listRow");
+              if (rowEl){
+                inp.classList.remove("gNameLike", "gNameTry");
+                const cls = prefClassForFoodName(inp.value);
+                if (cls) inp.classList.add(cls);
+
+                const starBtn = rowEl.querySelector('button[data-act="note"]');
+                const showStar = hasFoodNote(inp.value);
+                if (starBtn) starBtn.style.display = showStar ? "inline-flex" : "none";
+
+                const note = foodNoteText(inp.value);
+                const notesTa = rowEl.querySelector('textarea[data-k="notes"]');
+                const curNotes = (model.items[i].notes || "").trim();
+                if (note && !curNotes){
+                  model.items[i].notes = note;
+                  if (notesTa) notesTa.value = note;
+                }
+              }
+            }
           });
 
-          return [btnBack, btnSave];
+          inp.addEventListener("change", () => {
+            if (!model.items[i]) return;
+
+            if (k === "qty"){
+              // snap on commit to nearest quarter
+              const snapped = snapToQuarterString(inp.value);
+              inp.value = snapped;
+              model.items[i].qty = snapped;
+              return;
+            }
+
+            model.items[i][k] = (inp.value ?? "");
+          });
+
+          // blur commit for qty too (mobile often doesn't fire change)
+          if (k === "qty"){
+            inp.addEventListener("blur", () => {
+              if (!model.items[i]) return;
+              const snapped = snapToQuarterString(inp.value);
+              inp.value = snapped;
+              model.items[i].qty = snapped;
+            });
+          }
+        });
+
+        // actions
+        wrap.querySelectorAll("button[data-act]").forEach(b => {
+          b.addEventListener("click", (e) => {
+            const act = b.dataset.act;
+            if (act === "note") return; // handled above
+            e.preventDefault();
+
+            const i = +b.dataset.i;
+            if (act === "del"){
+              model.items.splice(i, 1);
+              if (!model.items.length) model.items.push(blankGroceryItem());
+              renderGroceryItemEditor();
+            }
+            if (act === "dup"){
+              model.items.splice(i+1, 0, deepClone(model.items[i]));
+              renderGroceryItemEditor();
+            }
+          });
+        });
+      }
+
+      return box;
+    },
+    footer: ({ close }) => {
+      const btnBack = mkBtn("Go Back", "ghost", () => close());
+
+      const btnSave = mkBtn("Save", "primary", () => {
+        // filter out completely blank rows
+        model.items = (model.items || []).filter(it => {
+          const hasName = (it.name || "").trim().length > 0;
+          const hasQty = (it.qty || "").toString().trim().length > 0;
+          const hasUnit = (it.unit || "").trim().length > 0;
+          const hasNotes = (it.notes || "").trim().length > 0;
+          const hasDesc = (it.description || "").trim().length > 0;
+          return hasName || hasQty || hasUnit || hasNotes || hasDesc;
+        });
+
+        if (isEdit){
+          model.updatedAt = Date.now();
+          updateGroceryList(model);
+        } else {
+          addGroceryList(model);
         }
+
+        close();
+        refreshStatsAndDatalist();
+        renderActivePanel();
       });
+
+      return [btnBack, btnSave];
     }
-
-    function openGroceryViewerModal(id){
-      const list = state.groceryLists.find(x => x.id === id);
-      if (!list) return;
-
-      const dt = new Date(list.updatedAt || list.createdAt);
-
-      openModal({
-        title: "Grocery List",
-        body: () => {
-          const box = document.createElement("div");
-          box.innerHTML = `
-            <div class="row" style="justify-content:space-between;gap:10px;margin-bottom:10px;">
-              <div class="chip">${fmtDateTime(dt)}</div>
-              <div class="chip">Items: ${list.items?.length || 0}</div>
-            </div>
-            <div class="subCard" style="padding:12px;">
-              ${renderGroceryItemsReadonly(list)}
-            </div>
-          `;
-          return box;
-        },
-footer: ({ close }) => {
-  const btnClose = mkBtn("Close", "ghost", () => { close(); openRecipeModal(mealKey, r); });
-  const btnEdit  = mkBtn("Edit",  "primary", () => { close(); openRecipeModal(mealKey, r); });
-  return [btnClose, btnEdit];
+  });
 }
+
+
+function openGroceryViewerModal(id){
+  const list = state.groceryLists.find(x => x.id === id);
+  if (!list) return;
+
+  const dt = new Date(list.updatedAt || list.createdAt);
+
+  openModal({
+    title: "Grocery List",
+    body: () => {
+      const box = document.createElement("div");
+      box.innerHTML = `
+        <div class="row" style="justify-content:space-between;gap:10px;margin-bottom:10px;">
+          <div class="chip">${fmtDateTime(dt)}</div>
+          <div class="chip">Items: ${list.items?.length || 0}</div>
+        </div>
+        <div class="subCard" style="padding:12px;">
+          ${renderGroceryItemsReadonly(list)}
+        </div>
+      `;
+      return box;
+    },
+    footer: ({ close }) => {
+      const btnClose = mkBtn("Close", "ghost", () => close());
+
+      const btnEdit  = mkBtn("Edit", "primary", () => {
+        close();
+        openGroceryListModal(list);
       });
+
+      const btnDelete = mkBtn("Delete", "danger", () => {
+        if (!confirm("Delete this grocery list?")) return;
+        deleteGroceryListById(list.id);
+        close();
+        refreshStatsAndDatalist();
+        renderActivePanel();
+      });
+
+      return [btnClose, btnEdit, btnDelete];
     }
+  });
+}
 
     function addGroceryList(list){
       state.groceryLists.push(list);
@@ -1747,54 +2026,91 @@ footer: ({ close }) => {
       persist();
     }
 
+    function deleteGroceryListById(id){
+  const idx = state.groceryLists.findIndex(x => x.id === id);
+  if (idx >= 0){
+    state.groceryLists.splice(idx, 1);
+    persist();
+  }
+}
+
     function groceryPreviewHtml(list){
-      const items = (list.items || []).slice(0, 6);
-      if (items.length === 0) return `<div class="muted">No items.</div>`;
-      return `
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          ${items.map(it => {
-            const name = it.name ? escapeHtml(it.name) : "<span class='muted'>(Unnamed)</span>";
-            const qty = it.qty ? escapeHtml(String(it.qty)) : "";
-            const unit = it.unit ? escapeHtml(it.unit) : "";
-            const meta = [qty, unit].filter(Boolean).join(" ");
-            return `<div>• ${name}${meta ? ` <span class="muted">(${meta})</span>` : ""}</div>`;
-          }).join("")}
-          ${(list.items||[]).length > items.length ? `<div class="muted">…and more</div>` : ""}
-        </div>
-      `;
-    }
+  const items = (list.items || []).slice(0, 6);
+  if (items.length === 0) return `<div class="muted">No items.</div>`;
 
-    function renderGroceryItemsReadonly(list){
-      const items = list.items || [];
-      if (items.length === 0) return `<div class="muted">No items.</div>`;
-      return `
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          ${items.map((it, idx) => {
-            const name = escapeHtml(it.name || "");
-            const qty = escapeHtml((it.qty ?? "").toString());
-            const unit = escapeHtml(it.unit || "");
-            const notes = escapeHtml(it.notes || "");
-            return `
-              <div class="subCard" style="padding:12px;">
-                <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
-                  <div style="font-weight:800;">${idx + 1}. ${name || "<span class='muted'>(Unnamed)</span>"}</div>
-                  <div class="chip">${[qty, unit].filter(Boolean).join(" ") || "—"}</div>
-                </div>
-                ${notes ? `<div style="margin-top:8px;color:rgba(234,240,255,0.9);"><span class="muted">Notes:</span> ${notes}</div>` : `<div class="muted" style="margin-top:8px;">No notes.</div>`}
-              </div>
-            `;
-          }).join("")}
-        </div>
-      `;
-    }
+  return `
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${items.map(it => {
+        const nameHtml = groceryNameHtml(it.name || "");
+        const qty = (it.qty ?? "").toString().trim();
+        const unit = (it.unit || "").trim();
+        const meta = [qty, unit].filter(Boolean).join(" ");
+        return `<div>• ${nameHtml}${meta ? ` <span class="muted">(${escapeHtml(meta)})</span>` : ""}</div>`;
+      }).join("")}
+      ${(list.items||[]).length > items.length ? `<div class="muted">…and more</div>` : ""}
+    </div>
+  `;
+}
 
-    function blankGroceryItem(){
-      return { name:"", qty:"", unit:"", notes:"" };
-    }
+
+function renderGroceryItemsReadonly(list){
+  const items = list.items || [];
+  if (items.length === 0) return `<div class="muted">No items.</div>`;
+
+  return `
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${items.map((it, idx) => {
+        const nameHtml = groceryNameHtml(it.name || "");
+        const qty = escapeHtml((it.qty ?? "").toString());
+        const unit = escapeHtml(it.unit || "");
+        const notes = escapeHtml(it.notes || "");
+        const desc = escapeHtml(it.description || "");
+
+        const qtyUnit = [qty, unit].filter(Boolean).join(" ") || "—";
+
+        return `
+          <div class="subCard" style="padding:12px;">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+              <div style="font-weight:800;">${idx + 1}. ${nameHtml}</div>
+              <div class="chip">${qtyUnit}</div>
+            </div>
+
+            <div style="margin-top:8px;">
+              ${notes
+                ? `<div style="color:rgba(234,240,255,0.9);"><span class="muted">Notes:</span> ${notes}</div>`
+                : `<div class="muted">No notes.</div>`
+              }
+            </div>
+
+            <div style="margin-top:8px;">
+              ${desc
+                ? `<div style="color:rgba(234,240,255,0.9);"><span class="muted">Description:</span> ${desc}</div>`
+                : `<div class="muted">No description.</div>`
+              }
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function blankGroceryItem(){
+  return { name:"", qty:"", unit:"", notes:"", description:"" };
+}
+
     function unitOptions(selected){
-      const units = ["", "lbs", "oz", "cups", "bottles", "containers", "packages", "count", "bags", "boxes"];
-      return units.map(u => `<option value="${escapeAttr(u)}" ${u===selected ? "selected" : ""}>${u || "—"}</option>`).join("");
-    }
+  // Back-compat: old saved "count" becomes "Each"
+  const sel = (selected === "count") ? "Each" : (selected || "");
+
+  // "Each" at top, keep the rest the same, remove "count"
+  const units = ["", "Each", "lbs", "oz", "cups", "bottles", "containers", "packages", "bags", "boxes"];
+
+  return units.map(u => {
+    const label = u || "—";
+    return `<option value="${escapeAttr(u)}" ${u===sel ? "selected" : ""}>${label}</option>`;
+  }).join("");
+}
 
     // ---------- Modal Helpers ----------
     function openModal({ title, body, footer }){
