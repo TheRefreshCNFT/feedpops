@@ -802,13 +802,6 @@ function toggleFoodPick(foodId){
     const glPickCount = document.getElementById("glPickCount");
     const glPickAddBtn = document.getElementById("glPickAddBtn");
     const glPickCancelBtn = document.getElementById("glPickCancelBtn");
-
-    const glPick = {
-      active: false,
-      listId: null,
-      selected: new Set()
-    };
-
     glPickAddBtn.addEventListener("click", () => commitGLPickSelection());
     glPickCancelBtn.addEventListener("click", () => endGLPickSession(true));
 
