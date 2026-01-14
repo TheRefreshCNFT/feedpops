@@ -1869,7 +1869,9 @@ function openGroceryListModal(existing){
               return;
             }
 
-            model.items[i][k] = (inp.value ?? "");
+            let val = (inp.value ?? "");
+if (k === "unit" && val === "Each") val = "count"; // safety if any old UI ever produced this
+model.items[i][k] = val;
 
             // If item name changes, update color + star, and auto-fill notes only if notes empty
             if (k === "name"){
@@ -1905,7 +1907,9 @@ function openGroceryListModal(existing){
               return;
             }
 
-            model.items[i][k] = (inp.value ?? "");
+            let val = (inp.value ?? "");
+if (k === "unit" && val === "Each") val = "count"; // safety if any old UI ever produced this
+model.items[i][k] = val;
           });
 
           // blur commit for qty too (mobile often doesn't fire change)
@@ -1946,6 +1950,9 @@ function openGroceryListModal(existing){
       const btnBack = mkBtn("Go Back", "ghost", () => close());
 
       const btnSave = mkBtn("Save", "primary", () => {
+        (model.items || []).forEach(it => {
+          if (it.unit === "Each") it.unit = "count";
+        });
         // filter out completely blank rows
         model.items = (model.items || []).filter(it => {
           const hasName = (it.name || "").trim().length > 0;
